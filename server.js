@@ -65,6 +65,12 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// Explicit route for index.html (Catch-all)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+
 // --- SOCKET.IO (REAL-TIME) ---
 
 io.use((socket, next) => {
