@@ -52,13 +52,18 @@ async function loadDbFromTelegram() {
             const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`;
 
             const fileContent = await axios.get(downloadUrl);
-            localDb = fileContent.data;
-            fs.writeFileSync(DB_FILE_PATH, JSON.stringify(localDb, null, 2));
-            console.log('✅ تم استرجاع قاعدة البيانات بنجاح من تيليجرام.');
+            const downloadedData = typeof fileContent.data === 'string' ? JSON.parse(fileContent.data) : fileContent.data;
+
+            if (downloadedData && Array.isArray(downloadedData.users)) {
+                localDb = downloadedData;
+                fs.writeFileSync(DB_FILE_PATH, JSON.stringify(localDb, null, 2));
+                console.log('✅ تم استرجاع قاعدة البيانات بنجاح من تيليجرام.');
+            }
         } else {
             console.log('ℹ️ لم يتم العثور على ملف قاعدة بيانات سابق في تيليجرام. سيتم بدء قاعدة جديدة.');
             if (fs.existsSync(DB_FILE_PATH)) {
-                localDb = JSON.parse(fs.readFileSync(DB_FILE_PATH));
+                const fileData = JSON.parse(fs.readFileSync(DB_FILE_PATH));
+                if (fileData && Array.isArray(fileData.users)) localDb = fileData;
             }
         }
     } catch (error) {
@@ -119,7 +124,8 @@ app.post('/api/register', async (req, res) => {
         localDb.users.push(newUser);
         saveAndSyncDb(); // مزامنة فورية
 
-        res.json({ success: true, message: 'تم التسجيل بنجاح' });
+        const token = jwt.sign({ id: newUser._id, role: newUser.role, username: newUser.username }, JWT_SECRET);
+        res.json({ success: true, token, user: { username: newUser.username, role: newUser.role } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

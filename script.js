@@ -49,15 +49,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ username, password, email })
             });
             const data = await res.json();
-            if (data.token) {
+            if (res.ok && data.token) {
                 localStorage.setItem('rc_token', data.token);
                 localStorage.setItem('rc_user', JSON.stringify(data.user));
                 startApp(data.token, data.user);
                 return;
+            } else if (data.error) {
+                return alert(data.error);
             }
         } catch (e) {
-            console.log("Server not found, entering simulation mode...");
-            simulationMode = true;
+            console.log("Server error or not found:", e);
         }
 
         if (simulationMode) {
