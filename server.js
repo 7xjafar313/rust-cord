@@ -21,7 +21,7 @@ const db = {
 };
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // --- AUTHENTICATION ---
 
@@ -67,7 +67,7 @@ app.post('/api/login', async (req, res) => {
 
 // Explicit route for index.html (Catch-all)
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 
@@ -114,6 +114,7 @@ io.on('connection', async (socket) => {
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`Rust Cord running on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Rust Cord running on port ${PORT}`);
 });
+
