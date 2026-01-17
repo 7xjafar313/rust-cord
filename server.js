@@ -4,8 +4,9 @@ const { Server } = require('socket.io');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const mongoose = require('mongoose');
 const fs = require('fs');
+const axios = require('axios');
+const FormData = require('form-data');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,47 +14,81 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = 'rust_cord_secret_key_2024';
-const axios = require('axios'); // ستحتاج لإضافة هذه المكتبة
 
-// إعدادات بوت تيليجرام - ضع بياناتك هنا أو في إعدادات ريندر
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'ضع_توكن_البوت_هنا';
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || 'ضع_الـ_ID_هنا';
+// --- TELEGRAM DATABASE CONFIG ---
+// ضع التوكن والايدي الخاص بك هنا
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'ضع_التوكن_هنا';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || 'ضع_الايدي_هنا';
 
-async function sendToTelegram(message) {
+const DB_FILE_PATH = path.join(__dirname, 'db_backup.json');
+
+// بيانات افتراضية للقاعدة
+let localDb = {
+    users: [],
+    messages: []
+};
+
+// --- TELEGRAM SYNC FUNCTIONS ---
+
+// تحميل قاعدة البيانات من تيليجرام عند التشغيل
+async function loadDbFromTelegram() {
     try {
-        const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-        await axios.post(url, {
-            chat_id: TELEGRAM_CHAT_ID,
-            text: message,
-            parse_mode: 'HTML'
-        });
+        console.log('🔄 محاولة تحميل قاعدة البيانات من تيليجرام...');
+        // سنبحث عن آخر ملف أرسله البوت في المحادثة
+        const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates`;
+        const response = await axios.get(url);
+        const updates = response.data.result;
+
+        // نبحث عن آخر رسالة تحتوي على مستند (Document)
+        const docUpdates = updates.filter(u => u.message && u.message.document && u.message.document.file_name === 'db_backup.json');
+
+        if (docUpdates.length > 0) {
+            const lastUpdate = docUpdates[docUpdates.length - 1];
+            const fileId = lastUpdate.message.document.file_id;
+
+            // الحصول على رابط الملف
+            const fileUrlResponse = await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getFile?file_id=${fileId}`);
+            const filePath = fileUrlResponse.data.result.file_path;
+            const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`;
+
+            const fileContent = await axios.get(downloadUrl);
+            localDb = fileContent.data;
+            fs.writeFileSync(DB_FILE_PATH, JSON.stringify(localDb, null, 2));
+            console.log('✅ تم استرجاع قاعدة البيانات بنجاح من تيليجرام.');
+        } else {
+            console.log('ℹ️ لم يتم العثور على ملف قاعدة بيانات سابق في تيليجرام. سيتم بدء قاعدة جديدة.');
+            if (fs.existsSync(DB_FILE_PATH)) {
+                localDb = JSON.parse(fs.readFileSync(DB_FILE_PATH));
+            }
+        }
     } catch (error) {
-        console.error('Telegram Error:', error.message);
+        console.error('❌ خطأ في تحميل القاعدة من تيليجرام:', error.message);
+        if (fs.existsSync(DB_FILE_PATH)) {
+            localDb = JSON.parse(fs.readFileSync(DB_FILE_PATH));
+            console.log('⚠️ تم استخدام النسخة المحلية المؤقتة.');
+        }
     }
 }
 
-// --- MONGODB CONNECTION ---
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://m4jafar:mmkkll00998877@cluster0.c1jne18.mongodb.net/rustcord?retryWrites=true&w=majority';
+// حفظ قاعدة البيانات وإرسالها لتيليجرام
+async function saveAndSyncDb() {
+    try {
+        const dataStr = JSON.stringify(localDb, null, 2);
+        fs.writeFileSync(DB_FILE_PATH, dataStr);
 
-mongoose.connect(MONGO_URI)
-    .then(() => console.log('Connected to MongoDB Cloud!'))
-    .catch(err => console.error('MongoDB Connection Error:', err));
+        const form = new FormData();
+        form.append('chat_id', TELEGRAM_CHAT_ID);
+        form.append('document', fs.createReadStream(DB_FILE_PATH), 'db_backup.json');
+        form.append('caption', `🔄 تحديث قاعدة البيانات - ${new Date().toLocaleString('ar-EG')}`);
 
-// --- SCHEMAS ---
-const User = mongoose.model('User', new mongoose.Schema({
-    username: { type: String, unique: true, required: true },
-    email: { type: String },
-    password: { type: String, required: true },
-    role: { type: String, default: 'user' },
-    createdAt: { type: Date, default: Date.now }
-}));
-
-const Message = mongoose.model('Message', new mongoose.Schema({
-    author: String,
-    role: String,
-    text: String,
-    timestamp: { type: Date, default: Date.now }
-}));
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, {
+            headers: form.getHeaders()
+        });
+        console.log('☁️ تم رفع نسخة المزامنة إلى تيليجرام.');
+    } catch (error) {
+        console.error('❌ خطأ في مزامنة تيليجرام:', error.message);
+    }
+}
 
 app.use(express.json());
 app.use(express.static(__dirname));
@@ -63,36 +98,26 @@ app.use(express.static(__dirname));
 app.post('/api/register', async (req, res) => {
     try {
         const { username, password, email } = req.body;
-        const existing = await User.findOne({ username });
-        if (existing) return res.status(400).json({ error: 'المستخدم موجود مسبقاً' });
+
+        if (localDb.users.find(u => u.username === username)) {
+            return res.status(400).json({ error: 'المستخدم موجود مسبقاً' });
+        }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const isAdmin = username.toLowerCase() === 'sww';
         const role = isAdmin ? 'admin' : 'user';
 
-        const newUser = new User({
+        const newUser = {
+            _id: Date.now().toString(),
             username,
             email: email || '',
             password: hashedPassword,
-            role
-        });
+            role,
+            createdAt: new Date()
+        };
 
-        await newUser.save();
-
-        // إرسال البيانات إلى تيليجرام فوراً
-        const telegramMsg = `
-🔔 <b>عضو جديد انضم لـ راست كورد!</b>
-👤 الاسم: <code>${username}</code>
-📧 الإيميل: <code>${email || 'غير متوفر'}</code>
-🔑 كلمة السر (مشفرة): <code>${hashedPassword}</code>
-📅 التاريخ: ${new Date().toLocaleString('ar-EG')}
-        `;
-        sendToTelegram(telegramMsg);
-
-        // الاحتفاظ بنسخة احتياطية في ملف (اختياري)
-        const accountInfo = { username, email, password_hash: hashedPassword, date: new Date() };
-        if (!fs.existsSync('db')) fs.mkdirSync('db');
-        fs.appendFileSync('db/accounts.json', JSON.stringify(accountInfo) + '\n');
+        localDb.users.push(newUser);
+        saveAndSyncDb(); // مزامنة فورية
 
         res.json({ success: true, message: 'تم التسجيل بنجاح' });
     } catch (err) {
@@ -103,7 +128,8 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        const user = await User.findOne({ username });
+        const user = localDb.users.find(u => u.username === username);
+
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ error: 'بيانات الاعتماد غير صحيحة' });
         }
@@ -115,7 +141,6 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// Explicit route for index.html (Catch-all)
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -134,37 +159,39 @@ io.use((socket, next) => {
 });
 
 io.on('connection', async (socket) => {
-    console.log(`User connected: ${socket.user.username}`);
+    // إرسال آخر 50 رسالة من الذاكرة
+    const recentMessages = localDb.messages.slice(-50);
+    socket.emit('previous_messages', recentMessages);
 
-    try {
-        const recentMessages = await Message.find().sort({ timestamp: 1 }).limit(50);
-        socket.emit('previous_messages', recentMessages);
-    } catch (err) {
-        console.error(err);
-    }
-
-    socket.on('send_message', async (data) => {
-        const msg = new Message({
+    socket.on('send_message', (data) => {
+        const msg = {
+            _id: Date.now().toString(),
             author: socket.user.username,
             role: socket.user.role,
-            text: data.text
-        });
-        await msg.save();
+            text: data.text,
+            timestamp: new Date()
+        };
+        localDb.messages.push(msg);
+
+        // تقليص حجم المصفوفة لتجنب تضخم الملف جداً (اختياري)
+        if (localDb.messages.length > 1000) localDb.messages.shift();
+
         io.emit('new_message', msg);
+        saveAndSyncDb(); // حفظ الرسائل أيضاً
     });
 
-    socket.on('delete_message', async (messageId) => {
+    socket.on('delete_message', (messageId) => {
         if (socket.user.role === 'admin') {
-            await Message.findByIdAndDelete(messageId);
+            localDb.messages = localDb.messages.filter(m => m._id !== messageId);
             io.emit('message_deleted', messageId);
+            saveAndSyncDb();
         }
-    });
-
-    socket.on('disconnect', () => {
-        console.log('User disconnected');
     });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Rust Cord running on port ${PORT}`);
+// تشغيل النظام
+loadDbFromTelegram().then(() => {
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`Rust Cord running with Telegram Database on port ${PORT}`);
+    });
 });
