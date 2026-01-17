@@ -33,7 +33,7 @@ async function sendToTelegram(message) {
 }
 
 // --- MONGODB CONNECTION ---
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://m4jafar:JAFARjahad1234@cluster0.c1jne18.mongodb.net/rustcord?retryWrites=true&w=majority';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://m4jafar:mmkkll00998877@cluster0.c1jne18.mongodb.net/rustcord?retryWrites=true&w=majority';
 
 mongoose.connect(MONGO_URI)
     .then(() => console.log('Connected to MongoDB Cloud!'))
