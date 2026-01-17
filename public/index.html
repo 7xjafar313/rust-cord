@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Cord | راست كورد - نظام متكامل</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Alexandria:wght@300;400;700&display=swap"
+        rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+    <!-- Login Overlay -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-box">
+            <img src="logo.png" alt="RC" class="auth-logo">
+            <h2 id="auth-title">تسجيل الدخول إلى راست كورد</h2>
+            <div class="input-group">
+                <label>اسم المستخدم</label>
+                <input type="text" id="auth-username" placeholder="أدخل اسم المستخدم">
+            </div>
+            <div class="input-group" id="email-group" style="display: none;">
+                <label>البريد الإلكتروني</label>
+                <input type="email" id="auth-email" placeholder="أدخل البريد الإلكتروني">
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور</label>
+                <input type="password" id="auth-password" placeholder="أدخل كلمة المرور">
+            </div>
+            <button id="auth-btn" class="primary-btn">تسجيل الدخول</button>
+            <p class="auth-switch">ليس لديك حساب؟ <span id="switch-to-register">إنشاء حساب</span></p>
+        </div>
+    </div>
+
+    <div class="app-container" style="display: none;" id="app-main">
+        <!-- Sidebar: Servers -->
+        <aside class="server-sidebar">
+            <div class="server-icon active" title="Rust Cord">
+                <span class="server-initials">RC</span>
+            </div>
+            <div class="separator"></div>
+            <div class="server-icon" title="Server 1">
+                <img src="logo.png" alt="S1" style="width:100%">
+            </div>
+            <div class="server-icon add-server" title="إضافة سيرفر">
+                <span>+</span>
+            </div>
+        </aside>
+
+        <!-- Sidebar: Channels -->
+        <aside class="channel-sidebar">
+            <header class="sidebar-header" id="invite-trigger">
+                <h1>راست كورد</h1>
+                <div class="invite-badge">دعوة +</div>
+            </header>
+
+            <div class="channel-list">
+                <div class="channel-category"><span>قنوات نصية</span></div>
+                <div class="channel-item active">
+                    <span class="hashtag">#</span>
+                    <span class="channel-name">العامة</span>
+                </div>
+                <div class="channel-item">
+                    <span class="hashtag">#</span>
+                    <span class="channel-name">أخبار-البرنامج</span>
+                </div>
+
+                <div class="channel-category"><span>قنوات صوتية</span></div>
+                <div id="voice-channels">
+                    <div class="channel-item voice-channel" data-room-id="waiting-room">
+                        <svg class="audio-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <path d="M12 1v22M5 8v8M2 10v4M19 8v8M22 10v4M15 5v14M9 5v14" />
+                        </svg>
+                        <span class="channel-name">غرفة الانتظار</span>
+                    </div>
+                    <div class="voice-members" id="voice-members-waiting-room"></div>
+
+                    <div class="channel-item voice-channel" data-room-id="lounge">
+                        <svg class="audio-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <path d="M12 1v22M5 8v8M2 10v4M19 8v8M22 10v4M15 5v14M9 5v14" />
+                        </svg>
+                        <span class="channel-name">المجلس (Lounge)</span>
+                    </div>
+                    <div class="voice-members" id="voice-members-lounge"></div>
+                </div>
+            </div>
+
+            <div id="voice-controls" style="display: none;" class="voice-controls">
+                <div class="voice-info">
+                    <span class="status">متصل صوتياً</span>
+                    <span class="room-name">غرفة الانتظار</span>
+                </div>
+                <div class="voice-actions">
+                    <button id="mute-btn" class="icon-btn" title="كتم الصوت">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                    </button>
+                    <button id="deafen-btn" class="icon-btn" title="كتم السماع">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                    </button>
+                    <button id="leave-voice-btn" class="icon-btn hangup" title="مغادرة">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91">
+                            </path>
+                            <line x1="23" y1="1" x2="1" y2="23"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div id="admin-voice-effects" style="display: none;" class="admin-effects-panel">
+                <span class="label">تأثيرات الصوت (ADMIN):</span>
+                <button class="effect-btn active" data-effect="none">طبيعي</button>
+                <button class="effect-btn" data-effect="robot">روبوت</button>
+                <button class="effect-btn" data-effect="chipmunk">سنجاب</button>
+                <button class="effect-btn" data-effect="deep">عميق</button>
+                <div class="separator-v"></div>
+                <button id="mute-all-btn" class="effect-btn danger-outline" title="كتم الجميع">كتم الكل 🔇</button>
+            </div>
+
+            <footer class="user-profile">
+                <div class="user-avatar" id="current-user-avatar">
+                    <div class="status-indicator online"></div>
+                </div>
+                <div class="user-info">
+                    <span class="username" id="display-username">جاري التحميل...</span>
+                    <span class="userid" id="display-role">#0000</span>
+                </div>
+                <div class="user-actions">
+                    <button class="icon-btn" id="settings-trigger" title="الإعدادات">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                    </button>
+                    <button class="icon-btn" id="logout-btn" title="تسجيل الخروج">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                            <polyline points="16 17 21 12 16 7" />
+                            <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                    </button>
+                </div>
+            </footer>
+        </aside>
+
+        <!-- Main Content: Chat -->
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-overlay" class="modal-overlay" style="display: none;">
+        <div class="modal-box settings-box">
+            <header class="modal-header">
+                <h2>إعدادات الحساب</h2>
+                <button class="close-modal" id="close-settings">&times;</button>
+            </header>
+            <div class="modal-body">
+                <section class="settings-section">
+                    <h3>المعلومات الشخصية</h3>
+                    <div class="input-group">
+                        <label>اسم المستخدم الجديد</label>
+                        <input type="text" id="settings-new-username" placeholder="تغيير اسم المستخدم">
+                    </div>
+                </section>
+
+                <section class="settings-section">
+                    <h3>الأمان</h3>
+                    <div class="input-group">
+                        <label>كلمة المرور الحالية</label>
+                        <input type="password" id="settings-old-password" placeholder="كلمة المرور القديمة">
+                    </div>
+                    <div class="input-group">
+                        <label>كلمة المرور الجديدة</label>
+                        <input type="password" id="settings-new-password" placeholder="كلمة المرور الجديدة">
+                    </div>
+                    <button id="update-profile-btn" class="primary-btn">تحديث البيانات</button>
+                </section>
+
+                <section class="settings-section" id="admin-management-section" style="display: none;">
+                    <h3>إدارة المستخدمين (للمدير فقط) 👑</h3>
+                    <div class="admin-request-list" id="password-requests">
+                        <!-- Password reset requests will appear here -->
+                        <p class="empty-msg">لا يوجد طلبات تغيير كلمة مرور حالياً.</p>
+                    </div>
+                </section>
+
+                <section class="settings-section" id="user-request-section">
+                    <h3>طلب مساعدة المدير</h3>
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">إذا نسيت كلمة المرور
+                        أو واجهت مشكلة، اطلب من المدير تغييرها لك.</p>
+                    <button id="request-pwd-reset-btn" class="secondary-btn">طلب تغيير كلمة المرور</button>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content: Chat -->
+    <main class="chat-area">
+        <header class="chat-header">
+            <div class="header-left">
+                <span class="hashtag">#</span>
+                <h2 id="current-channel-name">العامة</h2>
+            </div>
+            <div class="header-right">
+                <div id="admin-badge"
+                    style="display: none; background: var(--accent-rust); padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
+                    ADIMN VIEW</div>
+            </div>
+        </header>
+
+        <section class="messages-container" id="messages">
+            <!-- Messages will be injected here -->
+        </section>
+
+        <footer class="input-area">
+            <div class="input-container">
+                <button class="plus-btn">+</button>
+                <input type="text" placeholder="أرسل رسالة في #العامة" id="message-input">
+                <div class="input-actions">
+                    <button class="emoji-btn">😊</button>
+                </div>
+            </div>
+            <div class="copyright">
+                جميع الحقوق محفوظة لصالح <strong>راست كورد</strong> &copy; 2024
+            </div>
+        </footer>
+    </main>
+
+    <!-- Right Sidebar: Members -->
+    <aside class="members-sidebar">
+        <div class="member-category">الأعضاء المتصلون</div>
+        <div id="members-list">
+            <!-- Members will be injected here -->
+        </div>
+    </aside>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
