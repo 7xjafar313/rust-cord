@@ -6,7 +6,15 @@ let simulationMode = false;
 // Voice/WebRTC State
 let localStream = null;
 let peerConnections = {}; // socketId -> RTCPeerConnection
-const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const ICE_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
+    ]
+};
 
 // Audio Processing State
 let audioContext = null;
@@ -352,7 +360,9 @@ function initSocket(token) {
                 console.log("🎤 تم تفعيل الميكروفون");
 
                 if (currentUser.role === 'admin' || currentUser.role === 'assistant') {
-                    return await applyAudioProcessing(rawStream);
+                    const processed = await applyAudioProcessing(rawStream);
+                    localStream = processed; // Update global localStream to the processed one
+                    return processed;
                 }
             }
             return localStream;
@@ -377,9 +387,11 @@ function initSocket(token) {
         };
 
         pc.ontrack = (event) => {
+            console.log(`🔊 Receiving audio from: ${targetSocketId}`);
             const remoteAudio = new Audio();
             remoteAudio.srcObject = event.streams[0];
-            remoteAudio.play();
+            remoteAudio.autoplay = true;
+            remoteAudio.play().catch(err => console.error("Auto-play failed:", err));
         };
 
         const offer = await pc.createOffer();
@@ -403,9 +415,11 @@ function initSocket(token) {
             };
 
             pc.ontrack = (event) => {
+                console.log(`🔊 Receiving audio from: ${data.from}`);
                 const remoteAudio = new Audio();
                 remoteAudio.srcObject = event.streams[0];
-                remoteAudio.play();
+                remoteAudio.autoplay = true;
+                remoteAudio.play().catch(err => console.error("Auto-play failed:", err));
             };
         }
 
@@ -434,13 +448,39 @@ function initSocket(token) {
             if (rooms[rid].find(u => u.socketId === socket.id)) myRoomId = rid;
         });
 
-        if (myRoomId) {
-            const otherUsers = rooms[myRoomId].filter(u => u.socketId !== socket.id);
+        if (myRoomId && socket.id) {
+            const currentRoomUsers = rooms[myRoomId];
+            const otherUsers = currentRoomUsers.filter(u => u.socketId !== socket.id);
+            const otherSocketIds = otherUsers.map(u => u.socketId);
+
+            console.log(`🎙️ Voice Room Update: ${myRoomId}, Users: ${currentRoomUsers.length}`);
+
+            // 1. تنظيف الاتصالات القديمة
+            Object.keys(peerConnections).forEach(sid => {
+                if (!otherSocketIds.includes(sid)) {
+                    console.log(`🔌 Closing connection with: ${sid}`);
+                    if (peerConnections[sid]) peerConnections[sid].close();
+                    delete peerConnections[sid];
+                }
+            });
+
+            // 2. إنشاء اتصالات جديدة (فقط إذا كان معرف السوكيت الخاص بي أكبر لتجنب التصادم)
             for (const user of otherUsers) {
-                if (!peerConnections[user.socketId]) {
-                    await callUser(user.socketId);
+                if (!peerConnections[user.socketId] && socket.id > user.socketId) {
+                    if (localStream) {
+                        console.log(`📡 Initiating call to: ${user.username} (${user.socketId})`);
+                        await callUser(user.socketId);
+                    } else {
+                        console.warn("⚠️ Cannot initiate call: localStream is not ready");
+                    }
                 }
             }
+        } else if (!myRoomId) {
+            // أنا لست في أي غرفة، أغلق كل الاتصالات
+            Object.keys(peerConnections).forEach(sid => {
+                peerConnections[sid].close();
+                delete peerConnections[sid];
+            });
         }
 
         // UI Update
