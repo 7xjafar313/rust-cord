@@ -31,20 +31,22 @@ document.addEventListener('DOMContentLoaded', () => {
         authTitle.innerText = isRegistering ? 'إنشاء حساب في راست كورد' : 'تسجيل الدخول إلى راست كورد';
         authBtn.innerText = isRegistering ? 'إنشاء حساب' : 'تسجيل الدخول';
         switchToRegister.innerText = isRegistering ? 'تسجيل الدخول' : 'إنشاء حساب';
+        document.getElementById('email-group').style.display = isRegistering ? 'block' : 'none';
     });
 
     authBtn.addEventListener('click', async () => {
         const username = document.getElementById('auth-username').value;
         const password = document.getElementById('auth-password').value;
+        const email = isRegistering ? document.getElementById('auth-email').value : '';
 
-        if (!username || !password) return alert('يرجى ملء جميع الحقول');
+        if (!username || !password || (isRegistering && !email)) return alert('يرجى ملء جميع الحقول');
 
         // Check if server is running, if not, use simulation
         try {
             const res = await fetch(isRegistering ? '/api/register' : '/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify({ username, password, email })
             });
             const data = await res.json();
             if (data.token) {
