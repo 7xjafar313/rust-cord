@@ -17,8 +17,8 @@ const JWT_SECRET = 'rust_cord_secret_key_2024';
 
 // --- TELEGRAM DATABASE CONFIG ---
 // ضع التوكن والايدي الخاص بك هنا
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'ضع_التوكن_هنا';
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || 'ضع_الايدي_هنا';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '6780979570:AAEpS358Uxk_FuegiXu80-ElfxnVFE_AQrU';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '1680454327';
 
 const DB_FILE_PATH = path.join(__dirname, 'db_backup.json');
 
