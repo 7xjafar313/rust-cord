@@ -42,9 +42,18 @@ let replyingTo = null; // { id, author, text }
 let socketUsernameMap = {}; // socketId -> username for UI display
 
 // Mock database for simulation mode
-let mockMessages = JSON.parse(localStorage.getItem('rc_mock_messages')) || [
-    { _id: '1', author: 'نظام راست', text: 'مرحباً بك في النسخة التجريبية من راست كورد!', timestamp: new Date(), role: 'admin' }
-];
+let mockMessages = [];
+try {
+    mockMessages = JSON.parse(localStorage.getItem('rc_mock_messages')) || [
+        { _id: '1', author: 'نظام راست', text: 'مرحباً بك في النسخة التجريبية من راست كورد!', timestamp: new Date(), role: 'admin' }
+    ];
+} catch (e) {
+    console.error("Error parsing mock messages, resetting...", e);
+    mockMessages = [
+        { _id: '1', author: 'نظام راست', text: 'مرحباً بك في النسخة التجريبية من راست كورد!', timestamp: new Date(), role: 'admin' }
+    ];
+    localStorage.removeItem('rc_mock_messages');
+}
 
 // Local Storage Helpers for App Performance
 function saveMessagesToLocal(key, messages) {
@@ -149,16 +158,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const savedToken = localStorage.getItem('rc_token') || localStorage.getItem('rc_sim_token');
-    const savedUser = localStorage.getItem('rc_user') || localStorage.getItem('rc_sim_user');
-    if (savedToken && savedUser) {
-        startApp(savedToken, JSON.parse(savedUser));
-    }
-
-    logoutBtn.addEventListener('click', () => {
+    try {
+        const savedToken = localStorage.getItem('rc_token') || localStorage.getItem('rc_sim_token');
+        const savedUser = localStorage.getItem('rc_user') || localStorage.getItem('rc_sim_user');
+        if (savedToken && savedUser) {
+            startApp(savedToken, JSON.parse(savedUser));
+        }
+    } catch (e) {
+        console.error("Auto-login failed:", e);
         localStorage.clear();
         location.reload();
-    });
+    }
+
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            localStorage.clear();
+            location.reload();
+        });
+    }
 
     // --- SERVER REQUESTS UI ---
     const addServerBtn = document.querySelector('.add-server');
