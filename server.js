@@ -274,7 +274,24 @@ app.post('/api/update-profile', async (req, res) => {
         if (newStatus) user.status = newStatus;
         if (newCustomStatus !== undefined) user.customStatus = newCustomStatus;
 
+        // Sync with voice rooms
+        Object.keys(voiceRooms).forEach(roomId => {
+            voiceRooms[roomId].forEach(member => {
+                if (member.userId === user._id) {
+                    member.avatar = user.avatar;
+                    member.username = user.username;
+                    member.status = user.status;
+                    member.customStatus = user.customStatus;
+                }
+            });
+        });
+
         await saveAndSyncDb();
+
+        // Broadcast change to everyone
+        io.emit('voice_state_update', voiceRooms);
+        broadcastOnlineUsers();
+
         res.json({ success: true, user: { username: user.username, role: user.role, avatar: user.avatar, status: user.status, customStatus: user.customStatus } });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -449,6 +466,26 @@ app.get('*', (req, res) => {
 
 // --- SOCKET.IO ---
 
+const broadcastOnlineUsers = () => {
+    const connectedSids = new Set();
+    for (const [id, s] of io.sockets.sockets) {
+        if (s.user) connectedSids.add(s.user.id);
+    }
+
+    const allUsers = localDb.users.map(userData => ({
+        id: userData._id || userData.id,
+        username: userData.username,
+        avatar: userData.avatar,
+        status: connectedSids.has(userData._id || userData.id) ? (userData.status || 'online') : 'offline',
+        customStatus: userData.customStatus,
+        role: userData.role,
+        isVerified: userData.isVerified,
+        level: userData.level
+    }));
+
+    io.emit('update_members_list', allUsers);
+};
+
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) return next(new Error('Authentication error'));
@@ -461,28 +498,11 @@ io.use((socket, next) => {
 });
 
 io.on('connection', async (socket) => {
-    // إرسالة قائمة الأعضاء المتصلين لجميع المستخدمين
-    const broadcastOnlineUsers = () => {
-        const connectedSids = new Set();
-        for (const [id, s] of io.sockets.sockets) {
-            if (s.user) connectedSids.add(s.user.id);
-        }
-
-        const allUsers = localDb.users.map(userData => ({
-            id: userData._id,
-            username: userData.username,
-            avatar: userData.avatar,
-            status: connectedSids.has(userData._id) ? (userData.status || 'online') : 'offline',
-            customStatus: userData.customStatus,
-            role: userData.role,
-            isVerified: userData.isVerified,
-            level: userData.level
-        }));
-
-        io.emit('update_members_list', allUsers);
-    };
-
     broadcastOnlineUsers();
+
+    socket.on('get_online_users', () => {
+        broadcastOnlineUsers();
+    });
 
     // إرسال قائمة السيرفرات الخاصة بالمستخدم فور الاتصال
     const sendMyServers = () => {
@@ -560,6 +580,14 @@ io.on('connection', async (socket) => {
             io.emit('level_up', { username: user.username, level: user.level });
         }
         saveAndSyncDb(); // حفظ الرسائل أيضاً
+
+        socket.on('typing', (data) => {
+            socket.broadcast.emit('user_typing', {
+                username: socket.user.username,
+                isTyping: data.isTyping,
+                serverId: data.serverId || 'global-server'
+            });
+        });
 
         // --- BOT COMMANDS (#شغل) ---
         if (data.text && data.text.startsWith('#شغل')) {

@@ -1,0 +1,23 @@
+{
+    "name": "Rust Cord | راست كورد",
+    "short_name": "RustCord",
+    "description": "نظام تواصل متكامل متطور - نسخة التطبيق",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0d0d0d",
+    "theme_color": "#de4b39",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "logo.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "logo.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

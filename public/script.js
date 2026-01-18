@@ -41,6 +41,22 @@ let mockMessages = JSON.parse(localStorage.getItem('rc_mock_messages')) || [
     { _id: '1', author: 'نظام راست', text: 'مرحباً بك في النسخة التجريبية من راست كورد!', timestamp: new Date(), role: 'admin' }
 ];
 
+// Local Storage Helpers for App Performance
+function saveMessagesToLocal(key, messages) {
+    localStorage.setItem(`rc_cache_${key}`, JSON.stringify(messages.slice(-50)));
+}
+
+function loadMessagesFromLocal(key) {
+    const saved = localStorage.getItem(`rc_cache_${key}`);
+    return saved ? JSON.parse(saved) : [];
+}
+
+function updateLocalCache(key, msg) {
+    const messages = loadMessagesFromLocal(key);
+    messages.push(msg);
+    saveMessagesToLocal(key, messages);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const authBtn = document.getElementById('auth-btn');
     const authTitle = document.getElementById('auth-title');
@@ -225,11 +241,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     settingsTrigger.addEventListener('click', () => {
         settingsOverlay.style.display = 'flex';
+        updateUIForUser(); // Ensure fields are fresh
         if (currentUser.role === 'admin' || currentUser.role === 'assistant') {
             loadPasswordRequests();
             loadRolesAdmin();
             loadAuditLogs();
         }
+    });
+
+    document.getElementById('avatar-file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) return alert('حجم الصورة كبير جداً (الأقصى 2MB)');
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                document.getElementById('settings-avatar').value = event.target.result;
+                const preview = document.querySelector('#settings-avatar-preview img');
+                if (preview) preview.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    document.getElementById('settings-avatar').addEventListener('input', (e) => {
+        const preview = document.querySelector('#settings-avatar-preview img');
+        if (preview) preview.src = e.target.value || 'logo.png';
     });
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -302,42 +338,87 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { }
     };
 
-    closeSettings.addEventListener('click', () => {
-        settingsOverlay.style.display = 'none';
+    // Settings Sidebar Navigation
+    document.querySelectorAll('.settings-sidebar .sidebar-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (item.id === 'logout-settings-btn') {
+                document.getElementById('logout-btn').click();
+                return;
+            }
+            document.querySelectorAll('.settings-sidebar .sidebar-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            const target = item.getAttribute('data-target');
+            document.querySelectorAll('.settings-content-section').forEach(sec => sec.style.display = 'none');
+            const targetEl = document.getElementById(target);
+            if (targetEl) targetEl.style.display = 'block';
+        });
     });
 
-    updateProfileBtn.addEventListener('click', async () => {
+    // Admin Sub-tabs Navigation
+    document.querySelectorAll('.admin-tab-nav-premium .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.admin-tab-nav-premium .tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const tab = btn.getAttribute('data-tab');
+            document.querySelectorAll('.admin-tab-panel').forEach(p => p.style.display = 'none');
+            const panel = document.getElementById(tab + '-tab');
+            if (panel) panel.style.display = 'block';
+        });
+    });
+
+    window.updateSettingsUI = function (user) {
+        if (!document.getElementById('settings-display-username')) return;
+        document.getElementById('settings-display-username').innerText = user.username;
+        document.getElementById('settings-display-role').innerText = user.role === 'admin' ? 'المدير العام' : (user.role === 'assistant' ? 'مساعد القائد' : 'عضو');
+        document.getElementById('settings-avatar-preview').querySelector('img').src = user.avatar || 'logo.png';
+        document.getElementById('settings-avatar').value = user.avatar || '';
+        document.getElementById('settings-custom-status').value = user.customStatus || '';
+        document.getElementById('settings-status-select').value = user.status || 'online';
+        document.getElementById('settings-new-username').value = user.username;
+
+        const xpPercent = (user.xp || 0) / ((user.level || 1) * 100) * 100;
+        document.getElementById('settings-xp-bar').style.width = xpPercent + '%';
+        document.getElementById('settings-display-lvl').innerText = `Level ${user.level || 1}`;
+
+        if (user.role === 'admin' || user.role === 'assistant') {
+            document.getElementById('admin-settings-link').style.display = 'block';
+        } else {
+            document.getElementById('admin-settings-link').style.display = 'none';
+        }
+    }
+
+    document.getElementById('update-profile-btn-user')?.addEventListener('click', updateProfile);
+    document.getElementById('update-profile-btn-security')?.addEventListener('click', updateProfile);
+
+    async function updateProfile() {
+        const avatar = document.getElementById('settings-avatar').value;
+        const customStatus = document.getElementById('settings-custom-status').value;
+        const status = document.getElementById('settings-status-select').value;
         const newUsername = document.getElementById('settings-new-username').value;
         const oldPassword = document.getElementById('settings-old-password').value;
         const newPassword = document.getElementById('settings-new-password').value;
-        const newAvatar = document.getElementById('settings-avatar').value;
-        const newStatus = document.getElementById('settings-status-select').value;
-        const newCustomStatus = document.getElementById('settings-custom-status').value;
         const token = localStorage.getItem('rc_token');
-
-        if (!token) return alert('غير ممكن في وضع التجربة');
 
         try {
             const res = await fetch('/api/update-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token, newUsername, oldPassword, newPassword, newAvatar, newStatus, newCustomStatus })
+                body: JSON.stringify({ token, newUsername, oldPassword, newPassword, newAvatar: avatar, newStatus: status, newCustomStatus: customStatus })
             });
+
             const data = await res.json();
             if (res.ok) {
                 alert('تم تحديث البيانات بنجاح!');
-                currentUser.username = data.user.username;
-                currentUser.avatar = data.user.avatar;
-                currentUser.status = data.user.status;
-                currentUser.customStatus = data.user.customStatus;
-
-                updateUIForUser();
-                localStorage.setItem('rc_user', JSON.stringify(currentUser));
-                settingsOverlay.style.display = 'none';
-
-                if (socket) {
-                    socket.emit('update_status', { status: currentUser.status, customStatus: currentUser.customStatus });
-                    socket.emit('get_online_users'); // Refresh everyone's list
+                if (newUsername !== currentUser.username) {
+                    location.reload();
+                } else {
+                    currentUser = { ...currentUser, ...data.user };
+                    updateSettingsUI(currentUser);
+                    document.getElementById('settings-overlay').style.display = 'none';
+                    if (socket) {
+                        socket.emit('update_status', { status: currentUser.status, customStatus: currentUser.customStatus });
+                        socket.emit('get_online_users');
+                    }
                 }
             } else {
                 alert(data.error);
@@ -345,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             alert('خطأ في الاتصال');
         }
-    });
+    }
 
     requestPwdResetBtn.addEventListener('click', async () => {
         const token = localStorage.getItem('rc_token');
@@ -592,6 +673,27 @@ function setReply(id, author, text) {
 function updateUIForUser() {
     document.getElementById('display-username').innerText = currentUser.username;
     document.getElementById('display-level').innerText = `Lvl ${currentUser.level || 1}`;
+
+    // Settings Profile Preview
+    const verifiedHtml = currentUser.isVerified ? '<span class="verified-badge" title="حساب موثق" style="margin-left:4px; vertical-align: middle;"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent-rust)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></span>' : '';
+    document.getElementById('settings-display-username').innerHTML = currentUser.username + verifiedHtml;
+    const roleMap = { 'admin': 'المدير العام 👑', 'assistant': 'مساعد القائد 🎖️', 'user': 'عضو 👤' };
+    document.getElementById('settings-display-role').innerText = roleMap[currentUser.role] || 'عضو';
+
+    const currentLvl = currentUser.level || 1;
+    const currentXp = currentUser.xp || 0;
+    const nextLvlXp = currentLvl * 100;
+    const xpPercent = Math.min((currentXp / nextLvlXp) * 100, 100);
+
+    // Update both UI bars (sidebar and settings)
+    const xpFill = document.getElementById('display-xp-fill');
+    if (xpFill) xpFill.style.width = xpPercent + '%';
+
+    const settingsXpBar = document.getElementById('settings-xp-bar');
+    if (settingsXpBar) settingsXpBar.style.width = xpPercent + '%';
+
+    document.getElementById('settings-display-lvl').innerText = `المستوى ${currentLvl} (${currentXp}/${nextLvlXp} XP)`;
+
     if (currentUser.avatar) {
         document.getElementById('current-user-avatar').innerHTML = `<img src="${currentUser.avatar}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
         document.getElementById('settings-avatar').value = currentUser.avatar;
@@ -609,37 +711,80 @@ function updateUIForUser() {
     }
 }
 
+let allMembersRaw = []; // Store for profile lookups
+
+function showUserProfile(username) {
+    const user = allMembersRaw.find(m => m.username === username);
+    if (!user) return;
+
+    document.getElementById('profile-card-username').innerText = user.username;
+    document.getElementById('profile-card-avatar').src = user.avatar || 'logo.png';
+    document.getElementById('profile-card-status').className = 'status-indicator ' + (user.status || 'online');
+
+    const roleMap = { 'admin': 'المدير العام 👑', 'assistant': 'مساعد القائد 🎖️', 'user': 'عضو 👤' };
+    document.getElementById('profile-card-role').innerText = roleMap[user.role] || 'عضو';
+    document.getElementById('profile-card-custom-status').innerText = user.customStatus || 'لا توجد حالة...';
+    document.getElementById('profile-card-lvl').innerText = `المستوى ${user.level || 1}`;
+
+    document.getElementById('profile-card-dm-btn').onclick = () => {
+        switchToDM(user.username);
+        document.getElementById('user-profile-modal').style.display = 'none';
+    };
+
+    document.getElementById('user-profile-modal').style.display = 'flex';
+}
+
 function renderMembersList(members) {
+    allMembersRaw = members;
     const container = document.getElementById('members-list');
     if (!container) return;
 
     container.innerHTML = '';
-    members.forEach(member => {
-        const memberDiv = document.createElement('div');
-        memberDiv.className = 'dm-user-item';
-        if (member.status === 'offline') memberDiv.classList.add('offline');
 
-        const verifiedHtml = member.isVerified ? '<span class="verified-badge" title="حساب موثق" style="margin-left:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></span>' : '';
-        const roleColor = (member.role === 'admin') ? 'var(--admin-gold)' : (member.role === 'assistant' ? 'var(--assistant-gold)' : '');
+    const admins = members.filter(m => m.role === 'admin' && m.status !== 'offline');
+    const assistants = members.filter(m => m.role === 'assistant' && m.status !== 'offline');
+    const usersOnline = members.filter(m => m.role !== 'admin' && m.role !== 'assistant' && m.status !== 'offline');
+    const offline = members.filter(m => m.status === 'offline');
 
-        let statusText = 'متصل';
-        if (member.status === 'offline') statusText = 'غير متصل';
-        else if (member.status === 'dnd') statusText = 'يرجى عدم الإزعاج';
-        else if (member.status === 'idle') statusText = 'خامل';
+    const renderCategory = (title, list) => {
+        if (list.length === 0) return;
+        const catDiv = document.createElement('div');
+        catDiv.className = 'member-category';
+        catDiv.innerText = `${title} — ${list.length}`;
+        container.appendChild(catDiv);
 
-        memberDiv.innerHTML = `
-            <div class="dm-user-avatar">
-                <img src="${member.avatar || 'logo.png'}" style="width:100%; height:100%; object-fit: cover;">
-                <div class="status-indicator-mini ${member.status || 'online'}"></div>
-            </div>
-            <div class="dm-user-info">
-                <span class="dm-username" style="color: ${roleColor}">${member.username}${verifiedHtml}</span>
-                <span class="dm-status">${member.customStatus || statusText}</span>
-            </div>
-        `;
-        memberDiv.onclick = () => switchToDM(member.username);
-        container.appendChild(memberDiv);
-    });
+        list.forEach(member => {
+            const memberDiv = document.createElement('div');
+            memberDiv.className = 'dm-user-item';
+            if (member.status === 'offline') memberDiv.classList.add('offline');
+
+            const verifiedHtml = member.isVerified ? '<span class="verified-badge" title="حساب موثق" style="margin-left:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></span>' : '';
+            const roleColor = (member.role === 'admin') ? 'var(--admin-gold)' : (member.role === 'assistant' ? 'var(--assistant-gold)' : '');
+
+            let statusText = 'متصل';
+            if (member.status === 'offline') statusText = 'غير متصل';
+            else if (member.status === 'dnd') statusText = 'يرجى عدم الإزعاج';
+            else if (member.status === 'idle') statusText = 'خامل';
+
+            memberDiv.innerHTML = `
+                <div class="dm-user-avatar">
+                    <img src="${member.avatar || 'logo.png'}" style="width:100%; height:100%; object-fit: cover; border-radius: 50%;">
+                    <div class="status-indicator-mini ${member.status || 'online'}"></div>
+                </div>
+                <div class="dm-user-info">
+                    <span class="dm-username" style="color: ${roleColor}">${member.username}${verifiedHtml}</span>
+                    <span class="dm-status">${member.customStatus || statusText}</span>
+                </div>
+            `;
+            memberDiv.onclick = () => showUserProfile(member.username);
+            container.appendChild(memberDiv);
+        });
+    };
+
+    renderCategory('المدراء', admins);
+    renderCategory('المساعدين', assistants);
+    renderCategory('الأعضاء المتصلين', usersOnline);
+    renderCategory('غير متصلين', offline);
 }
 
 function switchToChannel(channelName) {
@@ -650,8 +795,17 @@ function switchToChannel(channelName) {
     // Mark general as active if it's the one
     if (channelName === 'العامة') document.querySelector('.channel-item').classList.add('active');
 
-    // Refresh messages
-    if (socket) socket.emit('get_previous_messages'); // Assuming we can re-fetch
+    // تحميل الرسائل من الهاتف فوراً لسرعة التطبيق
+    const cached = loadMessagesFromLocal(`channel_${activeContext.serverId || 'global-server'}_${channelName}`);
+    if (cached.length > 0) {
+        const container = document.getElementById('messages');
+        container.innerHTML = '';
+        cached.forEach(msg => renderMessage(msg));
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // Refresh messages from server
+    if (socket) socket.emit('get_previous_messages', { serverId: activeContext.serverId || 'global-server' });
 }
 
 function switchToDM(username, avatar) {
@@ -668,6 +822,15 @@ function switchToDM(username, avatar) {
         if (statusEl && statusEl.innerText.includes('رسالة')) statusEl.innerText = 'متصل';
     }
 
+    // تحميل الرسائل من الهاتف فوراً
+    const cached = loadMessagesFromLocal(`dm_${username}`);
+    if (cached.length > 0) {
+        const container = document.getElementById('messages');
+        container.innerHTML = '';
+        cached.forEach(msg => renderMessage(msg));
+        container.scrollTop = container.scrollHeight;
+    }
+
     // Fetch DMs
     if (socket) socket.emit('get_dms_with', username);
 }
@@ -680,11 +843,19 @@ function initSocket(token) {
         messagesContainer.innerHTML = '';
         messages.forEach(msg => renderMessage(msg));
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        // حفظ في الذاكرة المحلية للتطبيق
+        const contextKey = `channel_${activeContext.serverId || 'global-server'}_${activeContext.id}`;
+        saveMessagesToLocal(contextKey, messages);
     });
 
     socket.on('new_message', (msg) => {
         renderMessage(msg);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        // تحديث الذاكرة المحلية
+        const contextKey = `channel_${msg.serverId || 'global-server'}_${msg.channelId || 'العامة'}`;
+        updateLocalCache(contextKey, msg);
     });
 
     socket.on('update_reactions', (data) => {
@@ -732,6 +903,9 @@ function initSocket(token) {
             document.getElementById('messages').innerHTML = '';
             messages.forEach(msg => renderMessage(msg));
             document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+
+            // حفظ في الذاكرة المحلية
+            saveMessagesToLocal(`dm_${activeContext.id}`, messages);
         }
     });
 
@@ -744,6 +918,10 @@ function initSocket(token) {
             showDMNotification(msg);
         }
         updateDMList(msg);
+
+        // تحديث الذاكرة المحلية
+        const otherUser = msg.from === currentUser.username ? msg.to : msg.from;
+        updateLocalCache(`dm_${otherUser}`, msg);
     });
 
     function showDMNotification(msg) {
@@ -1527,28 +1705,32 @@ function initSocket(token) {
             return;
         }
 
-        // Check for WebRTC support
+        // التحقق من دعم مشاركة الشاشة
         if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
             const isAndroid = /Android/.test(navigator.userAgent);
             const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
-            let errorMsg = "عذراً، مشاركة الشاشة غير مدعومة في هذا المتصفح.";
+            let errorMsg = "عذراً، مشاركة الشاشة غير مدعومة في متصفحك الحالي.";
+
             if (isIOS) {
-                errorMsg = "آيفون وسفاري لا يدعمان مشاركة الشاشة حالياً. يرجى استخدام جهاز كمبيوتر.";
+                errorMsg = "على آيفون، يرجى استخدام الكاميرا أو الدخول من جهاز كمبيوتر للمشاركة.";
             } else if (isAndroid) {
-                errorMsg = "أندرويد كروم لا يدعم مشاركة الشاشة للويب حالياً. جرب استخدام متصفح Firefox على أندرويد أو استخدم جهاز كمبيوتر.";
+                errorMsg = "بسبب قيود أندرويد، قد لا تعمل المشاركة من المتصفح العادي. \n\nجرب الحل الآتي:\n1. استخدم متصفح Firefox أو Kiwi.\n2. قم بتفعيل خيار 'إصدار سطح المكتب' (Desktop Site).\n3. حاول مرة أخرى.";
             } else if (!window.isSecureContext) {
-                errorMsg = "مشاركة الشاشة تتطلب رابط آمن (HTTPS).";
+                errorMsg = "يجب استخدام HTTPS (رابط آمن) لمشاركة الشاشة.";
             }
+
             alert(errorMsg);
             return;
         }
 
+        console.log("📱 محاولة تشغيل مشاركة الشاشة على الأجهزة المحمولة...");
         try {
-            // Simplified constraints for better mobile compatibility
-            // Enhanced constraints for DisplayMedia
             const constraints = {
-                video: true, // Simple Boolean 'true' often works best on mobile browsers that support it
+                video: {
+                    cursor: "always",
+                    displaySurface: "monitor" // بعض متصفحات الأندرويد تفضل هذه التعريفات
+                },
                 audio: false
             };
 
@@ -1763,7 +1945,39 @@ function renderMessages(msgs) {
     const container = document.getElementById('messages');
     container.innerHTML = '';
     msgs.forEach(renderMessage);
-    container.scrollTop = container.scrollHeight;
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+}
+
+function parseDiscordMarkdown(text) {
+    if (!text) return '';
+
+    // Escaping HTML
+    let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Links
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    html = html.replace(urlRegex, '<a href="$1" target="_blank" style="color: #00a8fc; text-decoration: none;">$1</a>');
+
+    // Bold **text**
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic *text* or _text_
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    html = html.replace(/_(.*?)_/g, '<em>$1</em>');
+
+    // Underline __text__
+    html = html.replace(/__(.*?)__/g, '<span style="text-decoration: underline;">$1</span>');
+
+    // Strikethrough ~~text~~
+    html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
+
+    // Inline Code `text`
+    html = html.replace(/`(.*?)`/g, '<code style="background: rgba(0,0,0,0.3); padding: 2px 4px; border-radius: 4px; font-family: monospace;">$1</code>');
+
+    // Code blocks ```text```
+    html = html.replace(/```([\s\S]*?)```/g, '<pre style="background: #2b2d31; padding: 10px; border-radius: 8px; margin: 8px 0; overflow-x: auto; border: 1px solid rgba(255,255,255,0.05); font-family: monospace;">$1</pre>');
+
+    return html;
 }
 
 function renderMessage(msg) {
@@ -1831,6 +2045,8 @@ function renderMessage(msg) {
     }
     reactionsHtml += '</div>';
 
+    const parsedText = parseDiscordMarkdown(msg.text);
+
     messageDiv.innerHTML = `
         <div class="message-avatar">
             <img src="${avatarSrc}" style="width:100%; height:100%; object-fit: cover; border-radius:50%">
@@ -1857,12 +2073,13 @@ function renderMessage(msg) {
                     <button class="action-icon" onclick="addReaction('${msg._id}', '💯')">💯</button>
                 </div>
             </div>
-            <p class="text">${msg.text || ''}</p>
+            <p class="text">${parsedText}</p>
             ${mediaHtml}
             ${reactionsHtml}
         </div>
     `;
     container.appendChild(messageDiv);
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
 }
 
 window.addReaction = function (messageId, emoji) {
@@ -1914,9 +2131,47 @@ function renderServers(servers) {
         }
 
         div.onclick = () => switchToServer(srv);
-        sidebar.insertBefore(div, sidebar.querySelector('.separator').nextSibling || sidebar.querySelector('.add-server'));
+        container.insertBefore(div, null);
     });
 }
+
+const typingUsers = new Set();
+let typingTimeout = null;
+
+document.getElementById('message-input').addEventListener('input', () => {
+    if (socket) {
+        if (!typingTimeout) {
+            socket.emit('typing', { isTyping: true, serverId: activeContext.serverId });
+        }
+
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            socket.emit('typing', { isTyping: false, serverId: activeContext.serverId });
+            typingTimeout = null;
+        }, 3000);
+    }
+});
+
+socket.on('user_typing', (data) => {
+    if (data.serverId !== (activeContext.serverId || 'global-server')) return;
+
+    if (data.isTyping) {
+        typingUsers.add(data.username);
+    } else {
+        typingUsers.delete(data.username);
+    }
+
+    const indicator = document.getElementById('typing-indicator');
+    if (typingUsers.size === 0) {
+        indicator.innerText = '';
+    } else if (typingUsers.size === 1) {
+        indicator.innerText = `${[...typingUsers][0]} يكتب الآن...`;
+    } else if (typingUsers.size > 1 && typingUsers.size < 4) {
+        indicator.innerText = `${[...typingUsers].join(', ')} يكتبون الآن...`;
+    } else if (typingUsers.size >= 4) {
+        indicator.innerText = `عدة أشخاص يكتبون الآن...`;
+    }
+});
 
 function switchToServer(server) {
     activeContext.serverId = server._id;
