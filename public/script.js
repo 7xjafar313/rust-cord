@@ -364,30 +364,44 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.admin-tab-nav-premium .tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             const tab = btn.getAttribute('data-tab');
-            document.querySelectorAll('.admin-tab-panel').forEach(p => p.style.display = 'none');
-            const panel = document.getElementById(tab + '-tab');
-            if (panel) panel.style.display = 'block';
+            document.querySelectorAll('.admin-tab-content').forEach(p => p.classList.remove('active')); // Use class toggling or display
+            document.querySelectorAll('.admin-tab-content').forEach(p => p.style.display = 'none');
+
+            const panel = document.getElementById(tab);
+            if (panel) {
+                panel.style.display = 'block';
+                panel.classList.add('active');
+            }
         });
     });
 
     window.updateSettingsUI = function (user) {
         if (!document.getElementById('settings-display-username')) return;
+
+        // Update Preview
         document.getElementById('settings-display-username').innerText = user.username;
         document.getElementById('settings-display-role').innerText = user.role === 'admin' ? 'المدير العام' : (user.role === 'assistant' ? 'مساعد القائد' : 'عضو');
-        document.getElementById('settings-avatar-preview').querySelector('img').src = user.avatar || 'logo.png';
+
+        const avatarEl = document.getElementById('preview-avatar-circle');
+        const avatarUrl = user.avatar || 'logo.png';
+        avatarEl.style.backgroundImage = `url('${avatarUrl}')`;
+        avatarEl.style.backgroundSize = 'cover';
+        avatarEl.style.backgroundPosition = 'center';
+
         document.getElementById('settings-avatar').value = user.avatar || '';
         document.getElementById('settings-custom-status').value = user.customStatus || '';
-        document.getElementById('settings-status-select').value = user.status || 'online';
-        document.getElementById('settings-new-username').value = user.username;
+        document.getElementById('settings-status').value = user.status || 'online';
+        document.getElementById('settings-username').value = user.username;
 
         const xpPercent = (user.xp || 0) / ((user.level || 1) * 100) * 100;
         document.getElementById('settings-xp-bar').style.width = xpPercent + '%';
         document.getElementById('settings-display-lvl').innerText = `Level ${user.level || 1}`;
 
+        const adminSection = document.getElementById('admin-management-settings');
         if (user.role === 'admin' || user.role === 'assistant') {
-            document.getElementById('admin-settings-link').style.display = 'block';
+            if (adminSection) adminSection.style.display = 'block';
         } else {
-            document.getElementById('admin-settings-link').style.display = 'none';
+            if (adminSection) adminSection.style.display = 'none';
         }
     }
 
@@ -397,10 +411,15 @@ document.addEventListener('DOMContentLoaded', () => {
     async function updateProfile() {
         const avatar = document.getElementById('settings-avatar').value;
         const customStatus = document.getElementById('settings-custom-status').value;
-        const status = document.getElementById('settings-status-select').value;
-        const newUsername = document.getElementById('settings-new-username').value;
-        const oldPassword = document.getElementById('settings-old-password').value;
-        const newPassword = document.getElementById('settings-new-password').value;
+        const status = document.getElementById('settings-status').value;
+        const newUsername = document.getElementById('settings-username').value;
+
+        // Passwords might be in different section, get them safely
+        const oldPassEl = document.getElementById('current-password');
+        const newPassEl = document.getElementById('new-password');
+        const oldPassword = oldPassEl ? oldPassEl.value : '';
+        const newPassword = newPassEl ? newPassEl.value : '';
+
         const token = localStorage.getItem('rc_token');
 
         try {
@@ -418,16 +437,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     currentUser = { ...currentUser, ...data.user };
                     updateSettingsUI(currentUser);
-                    document.getElementById('settings-overlay').style.display = 'none';
+                    // Don't close overlay immediately so user can see result
                     if (socket) {
                         socket.emit('update_status', { status: currentUser.status, customStatus: currentUser.customStatus });
-                        socket.emit('get_online_users');
+                        // request refresh of users
                     }
                 }
             } else {
                 alert(data.error);
             }
         } catch (e) {
+            console.error(e);
             alert('خطأ في الاتصال');
         }
     }
@@ -843,6 +863,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function initSocket(token) {
         socket = io({ auth: { token } });
         const messagesContainer = document.getElementById('messages');
+
+        socket.on('roles_updated', (roles) => {
+            renderRoles(roles);
+        });
 
         socket.on('previous_messages', (messages) => {
             messagesContainer.innerHTML = '';
@@ -2166,6 +2190,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
             div.onclick = () => switchToServer(srv);
             sidebar.insertBefore(div, addBtn);
+        });
+    }
+
+    function renderRoles(roles) {
+        const list = document.getElementById('admin-roles-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!roles || roles.length === 0) {
+            list.innerHTML = '<p class="empty-msg">لا توجد رتب إضافية.</p>';
+            return;
+        }
+        roles.forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'role-item';
+            div.style.display = 'flex';
+            div.style.justifyContent = 'space-between';
+            div.style.alignItems = 'center';
+            div.style.padding = '8px';
+            div.style.background = 'rgba(255,255,255,0.05)';
+            div.style.borderRadius = '4px';
+            div.style.marginTop = '4px';
+            div.style.borderRight = `4px solid ${r.color}`;
+
+            div.innerHTML = `
+                <span style="font-weight:bold; color:var(--text-normal)">${r.name}</span>
+                <div style="display:flex; gap:10px; align-items:center">
+                    <span style="color:${r.color}; font-size:12px; font-family:monospace">${r.color}</span>
+                </div>
+            `;
+            list.appendChild(div);
         });
     }
 

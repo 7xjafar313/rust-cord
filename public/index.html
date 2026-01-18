@@ -351,9 +351,50 @@
                         </div>
                         <button id="update-profile-btn-security" class="premium-save-btn">تحديث</button>
                     </section>
+                    <section id="user-profile-section" class="settings-content-section">
+                        <h2 class="section-title">الملف الشخصي</h2>
+                        <div class="profile-preview-card"
+                            style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+                            <div id="preview-avatar-circle"
+                                style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 10px; background-color: #5865f2;">
+                            </div>
+                            <h3 id="settings-display-username" style="margin:0; color:white">Username</h3>
+                            <span id="settings-display-role" style="color: #bbb; font-size: 14px;">Role</span>
+                            <div
+                                style="margin-top: 10px; background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; overflow: hidden; width: 100%; max-width: 200px; margin-left: auto; margin-right: auto;">
+                                <div id="settings-xp-bar" style="width: 0%; height: 100%; background: #5865f2;"></div>
+                            </div>
+                            <small id="settings-display-lvl" style="color:#aaa; display:block; margin-top:4px">Level
+                                1</small>
+                        </div>
+                    </section>
+
                     <section id="admin-management-section" class="settings-content-section">
-                        <h2 class="section-title">الإدارة</h2>
-                        <div id="admin-roles-list"></div>
+                        <h2 class="section-title">لوحة الإدارة</h2>
+
+                        <div class="admin-tab-nav-premium"
+                            style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+                            <button class="tab-btn active" data-tab="admin-roles">الرتب</button>
+                            <button class="tab-btn" data-tab="admin-requests">الطلبات</button>
+                        </div>
+
+                        <div id="admin-roles" class="admin-tab-content active">
+                            <h3>إدارة الرتب</h3>
+                            <div class="input-group" style="display:flex; gap:10px; margin-bottom:15px;">
+                                <input type="text" id="new-role-name" placeholder="اسم الرتبة"
+                                    style="flex:1; padding:8px; background:#202225; border:none; color:white; border-radius:4px;">
+                                <input type="color" id="new-role-color" value="#ffffff"
+                                    style="width:40px; height:35px; border:none; padding:0; background:none;">
+                                <button onclick="createRole()"
+                                    style="background:#5865f2; color:white; border:none; padding:0 15px; border-radius:4px; cursor:pointer;">إنشاء</button>
+                            </div>
+                            <div id="admin-roles-list"></div>
+                        </div>
+
+                        <div id="admin-requests" class="admin-tab-content" style="display:none;">
+                            <h3>طلبات تغيير كلمة المرور</h3>
+                            <div id="password-requests"></div>
+                        </div>
                     </section>
                 </div>
             </main>
