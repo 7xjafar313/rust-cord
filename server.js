@@ -42,6 +42,19 @@ let voiceRooms = {
     "waiting-room": [] // { userId, username, avatar }
 };
 
+// --- YOUTUBE SEARCH HELPER ---
+async function searchYouTube(query) {
+    try {
+        const res = await axios.get(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+        });
+        const html = res.data;
+        const match = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/);
+        if (match) return match[1];
+    } catch (e) { console.error("YT Search Error:", e); }
+    return null;
+}
+
 // --- TELEGRAM SYNC FUNCTIONS ---
 
 // تحميل قاعدة البيانات من تيليجرام عند التشغيل
@@ -550,6 +563,58 @@ io.on('connection', async (socket) => {
             io.emit('level_up', { username: user.username, level: user.level });
         }
         saveAndSyncDb(); // حفظ الرسائل أيضاً
+
+        // --- BOT COMMANDS (#شغل) ---
+        if (data.text && data.text.startsWith('#شغل')) {
+            const query = data.text.replace('#شغل', '').trim();
+            if (query) {
+                (async () => {
+                    let videoId = null;
+                    if (query.includes('youtube.com/watch?v=')) {
+                        videoId = query.split('v=')[1].split('&')[0];
+                    } else if (query.includes('youtu.be/')) {
+                        videoId = query.split('youtu.be/')[1].split('?')[0];
+                    } else {
+                        videoId = await searchYouTube(query);
+                    }
+
+                    if (videoId) {
+                        const botMsg = {
+                            _id: 'bot-' + Date.now(),
+                            author: 'راست بوت 🤖',
+                            role: 'admin',
+                            text: `🎶 جاري تشغيل: ${query}`,
+                            serverId: data.serverId || 'global-server',
+                            timestamp: new Date()
+                        };
+                        io.emit('new_message', botMsg);
+                        io.emit('play_youtube', { videoId, title: query });
+                        logAudit('system', 'Bot', 'تشغيل يوتيوب', query);
+                    } else {
+                        const errorMsg = {
+                            _id: 'bot-' + Date.now(),
+                            author: 'راست بوت 🤖',
+                            role: 'admin',
+                            text: `❌ عذراً، لم أجد نتائج لـ: ${query}`,
+                            serverId: data.serverId || 'global-server',
+                            timestamp: new Date()
+                        };
+                        io.emit('new_message', errorMsg);
+                    }
+                })();
+            }
+        } else if (data.text && data.text.startsWith('#ايقاف')) {
+            const botMsg = {
+                _id: 'bot-' + Date.now(),
+                author: 'راست بوت 🤖',
+                role: 'admin',
+                text: `🛑 تم إيقاف التشغيل بواسطة ${socket.user.username}`,
+                serverId: data.serverId || 'global-server',
+                timestamp: new Date()
+            };
+            io.emit('new_message', botMsg);
+            io.emit('stop_music');
+        }
     });
 
     socket.on('delete_message', (messageId) => {
@@ -578,6 +643,16 @@ io.on('connection', async (socket) => {
 
             io.emit('update_reactions', { messageId, reactions: msg.reactions });
             saveAndSyncDb();
+        }
+    });
+
+    socket.on('clear_chat', (data) => {
+        if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
+            const serverId = data.serverId || 'global-server';
+            localDb.messages = localDb.messages.filter(m => m.serverId !== serverId);
+            io.emit('chat_cleared', { serverId });
+            saveAndSyncDb();
+            logAudit(socket.user.id, socket.user.username, 'مسح المحادثة', `تم مسح جميع الرسائل في سيرفر: ${serverId}`);
         }
     });
 

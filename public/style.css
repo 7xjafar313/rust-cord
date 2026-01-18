@@ -1153,44 +1153,113 @@ body {
     backdrop-filter: blur(4px);
 }
 
-/* Screen Share Overlay */
-.screen-share-overlay {
+/* Screens Container */
+.screens-container {
     position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80%;
-    max-width: 1000px;
+    bottom: 80px;
+    left: 20px;
+    display: flex;
+    flex-wrap: wrap-reverse;
+    gap: 15px;
+    z-index: 3000;
+    pointer-events: none;
+    /* Let clicks pass to items */
+}
+
+.screens-container>* {
+    pointer-events: auto;
+}
+
+/* Screen Share Overlay - Enhanced */
+.screen-share-overlay {
+    width: 320px;
     background: var(--bg-dark-800);
     border: 2px solid var(--accent-rust);
     border-radius: 12px;
-    z-index: 3000;
     overflow: hidden;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    transition: var(--transition-smooth);
+    position: relative;
+}
+
+.screen-share-overlay.fullscreen {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) !important;
+    width: 90vw;
+    height: 90vh;
+    z-index: 4000;
+    max-width: none;
+    bottom: auto;
+}
+
+.screen-share-overlay.fullscreen video {
+    flex: 1;
+    object-fit: contain;
+    max-height: none;
+}
+
+@media (max-width: 768px) {
+    .screens-container {
+        left: 10px;
+        right: 10px;
+        bottom: 100px;
+        justify-content: center;
+    }
+
+    .screen-share-overlay {
+        width: 100%;
+        max-width: 350px;
+    }
 }
 
 .screen-header {
-    padding: 10px 20px;
+    padding: 10px 16px;
     background: var(--bg-dark-900);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-bottom: 1px solid var(--border-glass);
+}
+
+.screen-header span {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.screen-controls {
+    display: flex;
+    gap: 8px;
 }
 
 .screen-share-overlay video {
     width: 100%;
-    height: auto;
-    max-height: 80vh;
     background: #000;
     display: block;
+    cursor: pointer;
 }
 
-.close-screen {
+.close-screen,
+.expand-screen {
     background: none;
     border: none;
-    color: white;
-    font-size: 24px;
+    color: var(--text-muted);
+    font-size: 18px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-smooth);
+}
+
+.close-screen:hover,
+.expand-screen:hover {
+    color: white;
 }
 
 .member-custom-status {
@@ -1380,6 +1449,19 @@ body {
 }
 
 /* Phase 3 Styles */
+.screen-indicator {
+    background: var(--online-green);
+    color: white;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: bold;
+    margin-right: 4px;
+}
+
 .user-level-badge {
     font-size: 10px;
     background: var(--bg-dark-600);
@@ -1561,6 +1643,10 @@ body {
         display: flex;
     }
 
+    .members-sidebar .mobile-only {
+        display: flex !important;
+    }
+
     .channel-sidebar {
         display: none;
         position: fixed;
@@ -1664,22 +1750,7 @@ body {
     flex-direction: column;
 }
 
-/* Screen Share Styles */
-.screen-share-overlay {
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    width: 320px;
-    background-color: var(--bg-dark-800);
-    border: 1px solid var(--border-glass);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    animation: slideUp 0.3s ease-out;
-}
+/* Stacking logic for multiple screen shares */
 
 @keyframes slideUp {
     from {

@@ -1,7 +1,11 @@
-let socket;
-let currentUser = null;
-let isRegistering = false;
-let simulationMode = false;
+// YouTube Player State
+let ytPlayer = null;
+let ytApiReady = false;
+
+window.onYouTubeIframeAPIReady = () => {
+    ytApiReady = true;
+    console.log("🎥 YouTube API Ready");
+};
 
 // Voice/WebRTC State
 let localStream = null;
@@ -12,7 +16,10 @@ const ICE_SERVERS = {
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' }
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stun.services.mozilla.com' },
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun.l.google.com:19305' }
     ]
 };
 
@@ -167,22 +174,39 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Close sidebar on mobile when clicking anywhere else
+    // Close sidebars on mobile when clicking anywhere else
     document.addEventListener('click', (e) => {
-        if (window.innerWidth <= 768 && channelSidebar.classList.contains('show')) {
-            if (!channelSidebar.contains(e.target) && e.target !== mobileMenuTrigger) {
-                channelSidebar.classList.remove('show');
+        if (window.innerWidth <= 768) {
+            // Channel Sidebar
+            if (channelSidebar.classList.contains('show')) {
+                if (!channelSidebar.contains(e.target) && e.target !== mobileMenuTrigger) {
+                    channelSidebar.classList.remove('show');
+                }
+            }
+            // Members Sidebar
+            if (membersSidebar && membersSidebar.classList.contains('show')) {
+                if (!membersSidebar.contains(e.target) && e.target !== membersTrigger) {
+                    membersSidebar.classList.remove('show');
+                }
             }
         }
     });
 
     // Members Sidebar Toggle
-    const membersTrigger = document.querySelector('button[title="قائمة الأعضاء"]');
+    const membersTrigger = document.getElementById('members-trigger');
     const membersSidebar = document.querySelector('.members-sidebar');
+    const closeMembers = document.getElementById('close-members');
 
     if (membersTrigger && membersSidebar) {
-        membersTrigger.onclick = () => {
+        membersTrigger.onclick = (e) => {
+            e.stopPropagation();
             membersSidebar.classList.toggle('show');
+        };
+    }
+
+    if (closeMembers) {
+        closeMembers.onclick = () => {
+            membersSidebar.classList.remove('show');
         };
     }
 
@@ -450,8 +474,10 @@ function startApp(token, user) {
         document.getElementById('admin-badge').style.display = 'block';
         document.getElementById('admin-voice-effects').style.display = 'flex';
         document.getElementById('admin-management-section').style.display = 'block';
+        document.getElementById('clear-chat-btn').style.display = 'flex';
     } else {
         document.getElementById('display-role').innerText = 'عضو';
+        document.getElementById('clear-chat-btn').style.display = 'none';
     }
 
     if (token === 'sim-token') {
@@ -528,6 +554,16 @@ function startApp(token, user) {
     });
 
     document.getElementById('cancel-reply').onclick = cancelReply;
+
+    // Clear Chat Logic
+    const clearChatBtn = document.getElementById('clear-chat-btn');
+    if (clearChatBtn) {
+        clearChatBtn.onclick = () => {
+            if (confirm('هل أنت متأكد من مسح جميع الرسائل في هذا السيرفر؟')) {
+                socket.emit('clear_chat', { serverId: activeContext.serverId || 'global-server' });
+            }
+        };
+    }
 }
 
 function cancelReply() {
@@ -657,6 +693,14 @@ function initSocket(token) {
     });
 
     socket.emit('get_my_servers');
+    socket.emit('get_previous_messages', { serverId: activeContext.serverId || 'global-server' });
+
+    socket.on('chat_cleared', (data) => {
+        if (activeContext.serverId === data.serverId) {
+            document.getElementById('messages').innerHTML = '';
+            alert('تم مسح جميع الرسائل في هذه القناة بواسطة الإدارة.');
+        }
+    });
 
     socket.on('previous_dms', (messages) => {
         if (activeContext.type === 'dm') {
@@ -699,16 +743,45 @@ function initSocket(token) {
 
     socket.on('play_music', (data) => {
         const audio = document.getElementById('global-audio');
+        // Stop YT if playing
+        if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo();
+
         audio.src = data.url;
         audio.play();
         document.getElementById('music-panel').style.display = 'flex';
-        document.getElementById('current-track').innerText = `مشغل الآن: ${data.url.split('/').pop()}`;
+        document.getElementById('current-track').innerText = `مشغل الآن: ${data.title || data.url.split('/').pop()}`;
+    });
+
+    socket.on('play_youtube', (data) => {
+        const audio = document.getElementById('global-audio');
+        audio.pause();
+        audio.src = '';
+
+        document.getElementById('music-panel').style.display = 'flex';
+        document.getElementById('current-track').innerText = `مشغل الآن (يوتيوب): ${data.title}`;
+
+        if (!ytPlayer && ytApiReady) {
+            ytPlayer = new YT.Player('youtube-player-container', {
+                height: '0',
+                width: '0',
+                videoId: data.videoId,
+                playerVars: { 'autoplay': 1, 'controls': 0 },
+                events: {
+                    'onReady': (event) => event.target.playVideo(),
+                    'onError': (e) => console.error("YT Error:", e)
+                }
+            });
+        } else if (ytPlayer && ytPlayer.loadVideoById) {
+            ytPlayer.loadVideoById(data.videoId);
+            ytPlayer.playVideo();
+        }
     });
 
     socket.on('stop_music', () => {
         const audio = document.getElementById('global-audio');
         audio.pause();
         audio.src = '';
+        if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo();
         document.getElementById('music-panel').style.display = 'none';
     });
 
@@ -1004,6 +1077,14 @@ function initSocket(token) {
     });
 
     function showRemoteScreen(socketId, stream) {
+        let container = document.getElementById('screens-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'screens-container';
+            container.className = 'screens-container';
+            document.body.appendChild(container);
+        }
+
         let videoWrap = document.getElementById(`screen-video-${socketId}`);
         if (!videoWrap) {
             videoWrap = document.createElement('div');
@@ -1011,18 +1092,50 @@ function initSocket(token) {
             videoWrap.className = 'screen-share-overlay';
             videoWrap.innerHTML = `
                 <div class="screen-header">
-                    <span>مشاركة شاشة - ${socketId === 'local' ? 'معاينة' : 'بث مباشر'}</span>
-                    <button class="close-screen">&times;</button>
+                    <span>${socketId === 'local' ? 'معاينة شاشتك' : 'شاشة مشاركة'}</span>
+                    <div class="screen-controls">
+                        <button class="expand-screen" title="توسيع">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                            </svg>
+                        </button>
+                        <button class="close-screen" title="إغلاق">&times;</button>
+                    </div>
                 </div>
                 <video autoplay playsinline muted></video>
             `;
-            document.body.appendChild(videoWrap);
-            videoWrap.querySelector('.close-screen').onclick = () => {
+            container.appendChild(videoWrap);
+
+            const video = videoWrap.querySelector('video');
+            const expandBtn = videoWrap.querySelector('.expand-screen');
+            const closeBtn = videoWrap.querySelector('.close-screen');
+
+            expandBtn.onclick = (e) => {
+                e.stopPropagation();
+                videoWrap.classList.toggle('fullscreen');
+            };
+
+            video.onclick = () => {
+                videoWrap.classList.toggle('fullscreen');
+            };
+
+            closeBtn.onclick = (e) => {
+                e.stopPropagation();
                 videoWrap.remove();
                 if (socketId === 'local') stopScreenShare();
             };
         }
-        videoWrap.querySelector('video').srcObject = stream;
+
+        const video = videoWrap.querySelector('video');
+        if (video.srcObject !== stream) {
+            video.srcObject = stream;
+        }
+
+        // Handle stream end
+        stream.getVideoTracks()[0].onended = () => {
+            videoWrap.remove();
+            if (socketId === 'local') stopScreenShare();
+        };
     }
 
     // Handle updates to rooms to initiate calls
@@ -1087,6 +1200,7 @@ function initSocket(token) {
                     memberDiv.className = 'voice-member-item';
                     const muteIcon = user.isMuted ? '<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>' : '';
                     const deafIcon = user.isDeafened ? '<svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="1" y1="1" x2="23" y2="23"></line></svg>' : '';
+                    const screenIcon = user.isSharingScreen ? '<div class="screen-indicator" title="يشارك الشاشة"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12H3V5h18v10z"/></svg> بث</div>' : '';
 
                     // Admin Actions
                     let adminActions = '';
@@ -1131,7 +1245,7 @@ function initSocket(token) {
                             ${customStatusHtml}
                             ${volumeControl}
                         </div>
-                        <div class="voice-status-icons">${muteIcon}${deafIcon}</div>
+                        <div class="voice-status-icons">${screenIcon}${muteIcon}${deafIcon}</div>
                         ${adminActions}
                     `;
                     container.appendChild(memberDiv);
@@ -1245,8 +1359,31 @@ function initSocket(token) {
             return;
         }
 
+        // Check for WebRTC support
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+            let errorMsg = "عذراً، مشاركة الشاشة غير مدعومة في متصفحك.";
+            if (isIOS) {
+                errorMsg = "عذراً، متصفح سفاري على آيفون لا يدعم مشاركة الشاشة عبر الويب. جرب استخدام جهاز كمبيوتر.";
+            } else if (!window.isSecureContext) {
+                errorMsg = "مشاركة الشاشة تتطلب اتصال آمن (HTTPS).";
+            } else {
+                errorMsg = "جرب استخدام متصفح كروم المحدث على أندرويد.";
+            }
+            alert(errorMsg);
+            return;
+        }
+
         try {
-            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            // Simplified constraints for better mobile compatibility
+            const constraints = {
+                video: {
+                    cursor: "always"
+                },
+                audio: false // Screen audio is tricky on mobile
+            };
+
+            screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
             document.getElementById('screen-share-btn').classList.add('active');
 
             // Show local preview
@@ -1258,8 +1395,16 @@ function initSocket(token) {
             Object.keys(peerConnections).forEach(async (sid) => {
                 await shareScreenWith(sid);
             });
+
+            localVoiceStatus.isSharingScreen = true;
+            socket.emit('update_voice_status', localVoiceStatus);
         } catch (e) {
             console.error("Screen share error:", e);
+            if (e.name === 'NotAllowedError') {
+                // User cancelled or permission denied
+            } else {
+                alert("حدث خطأ أثناء محاولة مشاركة الشاشة: " + e.message);
+            }
         }
     });
 
@@ -1274,9 +1419,12 @@ function initSocket(token) {
         Object.values(screenConnections).forEach(pc => pc.close());
         screenConnections = {};
         document.getElementById('screen-share-btn').classList.remove('active');
+
+        localVoiceStatus.isSharingScreen = false;
+        if (socket) socket.emit('update_voice_status', localVoiceStatus);
     }
 
-    let localVoiceStatus = { isMuted: false, isDeafened: false };
+    let localVoiceStatus = { isMuted: false, isDeafened: false, isSharingScreen: false };
 
     document.getElementById('mute-btn').addEventListener('click', () => {
         localVoiceStatus.isMuted = !localVoiceStatus.isMuted;
@@ -1308,7 +1456,9 @@ function initSocket(token) {
             localStream = null;
         }
 
-        localVoiceStatus = { isMuted: false, isDeafened: false };
+        stopScreenShare();
+
+        localVoiceStatus = { isMuted: false, isDeafened: false, isSharingScreen: false };
         document.getElementById('mute-btn').classList.remove('active');
         document.getElementById('deafen-btn').classList.remove('active');
         userAudios = {};
