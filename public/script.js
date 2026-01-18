@@ -21,6 +21,11 @@ let audioContext = null;
 let currentEffect = 'none';
 let voiceProcessor = null; // ScriptProcessor or BiquadFilter
 let processedStream = null;
+let userAudios = {}; // socketId -> Audio Element
+let screenStream = null;
+let screenConnections = {}; // socketId -> RTCPeerConnection (Screenshare)
+let activeContext = { type: 'channel', id: 'العامة' }; // { type: 'channel'|'dm', id: string }
+let currentTypingUsers = new Set();
 
 // Mock database for simulation mode
 let mockMessages = JSON.parse(localStorage.getItem('rc_mock_messages')) || [
@@ -127,8 +132,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
     settingsTrigger.addEventListener('click', () => {
         settingsOverlay.style.display = 'flex';
-        if (currentUser.role === 'admin' || currentUser.role === 'assistant') loadPasswordRequests();
+        if (currentUser.role === 'admin' || currentUser.role === 'assistant') {
+            loadPasswordRequests();
+            loadRolesAdmin();
+            loadAuditLogs();
+        }
     });
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.admin-tab').forEach(t => t.style.display = 'none');
+            btn.classList.add('active');
+            document.getElementById(`${btn.dataset.tab}-tab`).style.display = 'block';
+            if (btn.dataset.tab === 'audit') loadAuditLogs();
+        });
+    });
+
+    document.getElementById('create-role-btn').addEventListener('click', async () => {
+        const name = document.getElementById('new-role-name').value;
+        const color = document.getElementById('new-role-color').value;
+        const token = localStorage.getItem('rc_token');
+        if (!name) return;
+
+        try {
+            const res = await fetch('/api/admin/create-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, name, color })
+            });
+            if (res.ok) {
+                alert('تم إنشاء الرتبة');
+                loadRolesAdmin();
+            }
+        } catch (e) { console.error(e); }
+    });
+
+    async function loadRolesAdmin() {
+        const token = localStorage.getItem('rc_token');
+        const container = document.getElementById('roles-list-admin');
+        if (!container) return;
+        try {
+            const res = await fetch('/api/admin/get-all-roles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            const data = await res.json();
+            container.innerHTML = '';
+            data.roles.forEach(role => {
+                const div = document.createElement('div');
+                div.className = 'role-item';
+                div.innerHTML = `
+                    <span class="role-badge" style="background: ${role.color}">${role.name}</span>
+                    <button class="btn-small" onclick="deleteRole('${role.name}')">حذف</button>
+                `;
+                container.appendChild(div);
+            });
+        } catch (e) { }
+    }
+
+    window.deleteRole = async function (roleName) {
+        if (!confirm(`هل أنت متأكد من حذف رتبة ${roleName}؟`)) return;
+        const token = localStorage.getItem('rc_token');
+        try {
+            const res = await fetch('/api/admin/delete-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, name: roleName })
+            });
+            if (res.ok) {
+                alert('تم حذف الرتبة');
+                loadRolesAdmin();
+            }
+        } catch (e) { }
+    };
 
     closeSettings.addEventListener('click', () => {
         settingsOverlay.style.display = 'none';
@@ -138,6 +216,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const newUsername = document.getElementById('settings-new-username').value;
         const oldPassword = document.getElementById('settings-old-password').value;
         const newPassword = document.getElementById('settings-new-password').value;
+        const newAvatar = document.getElementById('settings-avatar').value;
+        const newStatus = document.getElementById('settings-status-select').value;
+        const newCustomStatus = document.getElementById('settings-custom-status').value;
         const token = localStorage.getItem('rc_token');
 
         if (!token) return alert('غير ممكن في وضع التجربة');
@@ -146,15 +227,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/update-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token, newUsername, oldPassword, newPassword })
+                body: JSON.stringify({ token, newUsername, oldPassword, newPassword, newAvatar, newStatus, newCustomStatus })
             });
             const data = await res.json();
             if (res.ok) {
                 alert('تم تحديث البيانات بنجاح!');
                 currentUser.username = data.user.username;
-                document.getElementById('display-username').innerText = currentUser.username;
+                currentUser.avatar = data.user.avatar;
+                currentUser.status = data.user.status;
+                currentUser.customStatus = data.user.customStatus;
+
+                updateUIForUser();
                 localStorage.setItem('rc_user', JSON.stringify(currentUser));
                 settingsOverlay.style.display = 'none';
+
+                if (socket) socket.emit('update_status', { status: currentUser.status, customStatus: currentUser.customStatus });
             } else {
                 alert(data.error);
             }
@@ -215,6 +302,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function loadAuditLogs() {
+        const token = localStorage.getItem('rc_token');
+        const container = document.getElementById('audit-logs-list');
+        if (!token || !container) return;
+        try {
+            const res = await fetch('/api/admin/get-audit-logs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            const data = await res.json();
+            container.innerHTML = '';
+            if (data.logs.length === 0) {
+                container.innerHTML = '<p class="empty-msg">لا توجد سجلات بعد.</p>';
+                return;
+            }
+            data.logs.forEach(log => {
+                const div = document.createElement('div');
+                div.className = 'role-item';
+                div.innerHTML = `
+                    <div style="font-size: 12px">
+                        <span style="color: var(--accent-rust)">${log.username}</span>: 
+                        <b>${log.action}</b> 
+                        <span style="color: var(--text-muted)">(${log.details})</span>
+                        <div style="font-size: 10px; color: var(--text-muted)">${new Date(log.timestamp).toLocaleString()}</div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        } catch (e) { console.error(e); }
+    }
+
     window.resolveRequest = async function (userId, action) {
         let newPassword = '';
         if (action === 'approve') {
@@ -244,9 +363,15 @@ function startApp(token, user) {
     localStorage.setItem('rc_sim_token', token);
     localStorage.setItem('rc_sim_user', JSON.stringify(user));
 
-    document.getElementById('auth-overlay').style.display = 'none';
     document.getElementById('app-main').style.display = 'flex';
     document.getElementById('display-username').innerText = user.username;
+    document.getElementById('display-level').innerText = `Lvl ${user.level || 1}`;
+
+    if (user.avatar) {
+        document.getElementById('current-user-avatar').innerHTML = `<img src="${user.avatar}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        document.getElementById('settings-avatar').value = user.avatar;
+    }
+
     if (user.role === 'admin' || user.role === 'assistant') {
         document.getElementById('display-role').innerText = user.role === 'admin' ? 'المدير العام' : 'مساعد القائد';
         document.getElementById('admin-badge').style.display = 'block';
@@ -261,6 +386,81 @@ function startApp(token, user) {
     } else {
         initSocket(token);
     }
+
+    // Channel Switching
+    document.querySelectorAll('.channel-item').forEach(item => {
+        item.addEventListener('click', () => {
+            switchToChannel(item.querySelector('.channel-name').innerText);
+        });
+    });
+
+    // File Upload Logic
+    const fileTrigger = document.getElementById('file-trigger');
+    const fileInput = document.getElementById('file-input');
+
+    fileTrigger.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                sendMessage(null, {
+                    file: event.target.result,
+                    fileName: file.name,
+                    fileType: file.type
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    document.getElementById('send-btn').addEventListener('click', () => {
+        const input = document.getElementById('message-input');
+        if (input.value.trim() !== '') {
+            sendMessage(input.value);
+            input.value = '';
+        }
+    });
+}
+
+function updateUIForUser() {
+    document.getElementById('display-username').innerText = currentUser.username;
+    document.getElementById('display-level').innerText = `Lvl ${currentUser.level || 1}`;
+    if (currentUser.avatar) {
+        document.getElementById('current-user-avatar').innerHTML = `<img src="${currentUser.avatar}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        document.getElementById('settings-avatar').value = currentUser.avatar;
+    }
+
+    document.getElementById('settings-status-select').value = currentUser.status || 'online';
+    document.getElementById('settings-custom-status').value = currentUser.customStatus || '';
+
+    const indicator = document.querySelector('#current-user-avatar .status-indicator');
+    if (indicator) {
+        indicator.className = 'status-indicator ' + (currentUser.status || 'online');
+    }
+}
+
+function switchToChannel(channelName) {
+    activeContext = { type: 'channel', id: channelName };
+    document.getElementById('current-channel-name').innerText = channelName;
+    document.getElementById('message-input').placeholder = `أرسل رسالة في #${channelName}`;
+    document.querySelectorAll('.channel-item, .dm-user-item').forEach(el => el.classList.remove('active'));
+    // Mark general as active if it's the one
+    if (channelName === 'العامة') document.querySelector('.channel-item').classList.add('active');
+
+    // Refresh messages
+    if (socket) socket.emit('get_previous_messages'); // Assuming we can re-fetch
+}
+
+function switchToDM(username, avatar) {
+    activeContext = { type: 'dm', id: username };
+    document.getElementById('current-channel-name').innerText = `@${username}`;
+    document.getElementById('message-input').placeholder = `أرسل رسالة إلى ${username}`;
+    document.querySelectorAll('.channel-item, .dm-user-item').forEach(el => el.classList.remove('active'));
+
+    // Fetch DMs
+    if (socket) socket.emit('get_dms_with', username);
 }
 
 function initSocket(token) {
@@ -282,6 +482,88 @@ function initSocket(token) {
         const el = document.querySelector(`[data-id="${id}"]`);
         if (el) el.remove();
     });
+
+    socket.on('previous_dms', (messages) => {
+        if (activeContext.type === 'dm') {
+            document.getElementById('messages').innerHTML = '';
+            messages.forEach(msg => renderMessage(msg));
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        }
+    });
+
+    socket.on('new_dm', (msg) => {
+        if (activeContext.type === 'dm' && (msg.from === activeContext.id || msg.from === currentUser.username)) {
+            renderMessage(msg);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        }
+        updateDMList(msg);
+    });
+
+    socket.on('user_typing', (data) => {
+        if (data.isTyping) currentTypingUsers.add(data.username);
+        else currentTypingUsers.delete(data.username);
+        renderTypingIndicator();
+    });
+
+    socket.on('level_up', (data) => {
+        const notification = document.createElement('div');
+        notification.className = 'level-up-toast';
+        notification.innerText = `✨ تهانينا ${data.username}! لقد ارتفعت للمستوى ${data.level}`;
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 5000);
+
+        if (data.username === currentUser.username) {
+            currentUser.level = data.level;
+            updateUIForUser();
+        }
+    });
+
+    socket.on('play_music', (data) => {
+        const audio = document.getElementById('global-audio');
+        audio.src = data.url;
+        audio.play();
+        document.getElementById('music-panel').style.display = 'flex';
+        document.getElementById('current-track').innerText = `مشغل الآن: ${data.url.split('/').pop()}`;
+    });
+
+    socket.on('stop_music', () => {
+        const audio = document.getElementById('global-audio');
+        audio.pause();
+        audio.src = '';
+        document.getElementById('music-panel').style.display = 'none';
+    });
+
+    function updateDMList(msg) {
+        const otherUser = msg.from === currentUser.username ? msg.to : msg.from;
+        let dmItem = document.getElementById(`dm-${otherUser}`);
+        if (!dmItem) {
+            dmItem = document.createElement('div');
+            dmItem.id = `dm-${otherUser}`;
+            dmItem.className = 'dm-user-item';
+            dmItem.innerHTML = `
+                <div class="dm-user-avatar"><img src="logo.png" style="width:100%"></div>
+                <div class="dm-user-info">
+                    <span class="dm-username">${otherUser}</span>
+                    <span class="dm-status">رسالة جديدة</span>
+                </div>
+            `;
+            dmItem.onclick = () => {
+                switchToDM(otherUser);
+                dmItem.classList.add('active');
+            };
+            document.getElementById('dm-list').appendChild(dmItem);
+        }
+    }
+
+    function renderTypingIndicator() {
+        const indicator = document.getElementById('typing-indicator');
+        if (currentTypingUsers.size === 0) {
+            indicator.innerText = '';
+        } else {
+            const users = Array.from(currentTypingUsers).join(', ');
+            indicator.innerText = `${users} يكتب الآن...`;
+        }
+    }
 
     // --- WEBRTC / VOICE ENGINE ---
 
@@ -391,6 +673,7 @@ function initSocket(token) {
             const remoteAudio = new Audio();
             remoteAudio.srcObject = event.streams[0];
             remoteAudio.autoplay = true;
+            userAudios[targetSocketId] = remoteAudio;
             remoteAudio.play().catch(err => console.error("Auto-play failed:", err));
         };
 
@@ -419,6 +702,7 @@ function initSocket(token) {
                 const remoteAudio = new Audio();
                 remoteAudio.srcObject = event.streams[0];
                 remoteAudio.autoplay = true;
+                userAudios[data.from] = remoteAudio;
                 remoteAudio.play().catch(err => console.error("Auto-play failed:", err));
             };
         }
@@ -439,6 +723,57 @@ function initSocket(token) {
             await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         }
     });
+
+    socket.on('screen_signal', async (data) => {
+        let pc = screenConnections[data.from];
+        if (!pc) {
+            pc = new RTCPeerConnection(ICE_SERVERS);
+            screenConnections[data.from] = pc;
+
+            pc.ontrack = (event) => {
+                showRemoteScreen(data.from, event.streams[0]);
+            };
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('screen_ice_candidate', { to: data.from, candidate: event.candidate });
+                }
+            };
+        }
+
+        if (data.signal.type === 'offer') {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit('screen_signal', { to: data.from, signal: answer });
+        } else if (data.signal.type === 'answer') {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
+        }
+    });
+
+    socket.on('screen_ice_candidate', async (data) => {
+        const pc = screenConnections[data.from];
+        if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    });
+
+    function showRemoteScreen(socketId, stream) {
+        let videoWrap = document.getElementById(`screen-video-${socketId}`);
+        if (!videoWrap) {
+            videoWrap = document.createElement('div');
+            videoWrap.id = `screen-video-${socketId}`;
+            videoWrap.className = 'screen-share-overlay';
+            videoWrap.innerHTML = `
+                <div class="screen-header">
+                    <span>مشاركة شاشة</span>
+                    <button class="close-screen">&times;</button>
+                </div>
+                <video autoplay playsinline></video>
+            `;
+            document.body.appendChild(videoWrap);
+            videoWrap.querySelector('.close-screen').onclick = () => videoWrap.remove();
+        }
+        videoWrap.querySelector('video').srcObject = stream;
+    }
 
     // Handle updates to rooms to initiate calls
     socket.on('voice_state_update', async (rooms) => {
@@ -461,6 +796,7 @@ function initSocket(token) {
                     console.log(`🔌 Closing connection with: ${sid}`);
                     if (peerConnections[sid]) peerConnections[sid].close();
                     delete peerConnections[sid];
+                    if (userAudios[sid]) delete userAudios[sid];
                 }
             });
 
@@ -481,6 +817,7 @@ function initSocket(token) {
                 peerConnections[sid].close();
                 delete peerConnections[sid];
             });
+            userAudios = {};
         }
 
         // UI Update
@@ -500,19 +837,37 @@ function initSocket(token) {
                         adminActions = `
                             <div class="admin-actions-group">
                                 <span class="admin-action-btn" onclick="requestMoveUser('${user.socketId}', '${roomId}')" title="نقل">✈️</span>
-                                <span class="admin-action-btn" onclick="requestForceMute('${user.socketId}')" title="كتم إجباري">🔇</span>
+                                <span class="admin-action-btn" onclick="toggleForceMute('${user.socketId}', ${user.isMuted})" title="${user.isMuted ? 'إلغاء الكتم' : 'كتم إجباري'}">${user.isMuted ? '🔊' : '🔇'}</span>
                                 <span class="admin-action-btn kick" onclick="requestKickUser('${user.socketId}')" title="طرد">🚫</span>
                             </div>
                         `;
                     }
 
+                    // Volume Control for others
+                    let volumeControl = '';
+                    if (user.socketId !== socket.id) {
+                        volumeControl = `
+                            <div class="user-volume-control">
+                                <span>🔈</span>
+                                <input type="range" min="0" max="1" step="0.1" value="1" oninput="setUserVolume('${user.socketId}', this.value)">
+                            </div>
+                        `;
+                    }
+
                     const verifiedHtml = user.isVerified ? '<span class="verified-badge" title="حساب موثق" style="margin-left:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></span>' : '';
+                    const avatarSrc = user.avatar || 'logo.png';
+                    const customStatusHtml = user.customStatus ? `<div class="member-custom-status">${user.customStatus}</div>` : '';
 
                     memberDiv.innerHTML = `
                         <div class="voice-member-avatar">
-                             <img src="logo.png" style="width:100%; border-radius:50%">
+                             <img src="${avatarSrc}" style="width:100%; height:100%; object-fit: cover; border-radius:50%">
+                             <div class="status-indicator-mini ${user.status || 'online'}"></div>
                         </div>
-                        <span class="member-name" style="${(user.role === 'admin' || user.role === 'assistant') ? (user.role === 'admin' ? 'color: var(--admin-gold)' : 'color: var(--assistant-gold)') : ''}">${user.username}${verifiedHtml}</span>
+                        <div class="member-voice-details">
+                            <span class="member-name" style="${(user.role === 'admin' || user.role === 'assistant') ? (user.role === 'admin' ? 'color: var(--admin-gold)' : 'color: var(--assistant-gold)') : ''}">${user.username}${verifiedHtml}</span>
+                            ${customStatusHtml}
+                            ${volumeControl}
+                        </div>
                         <div class="voice-status-icons">${muteIcon}${deafIcon}</div>
                         ${adminActions}
                     `;
@@ -528,10 +883,14 @@ function initSocket(token) {
         console.log("✈️ تم نقلك إلى غرفة أخرى بواسطة المدير");
     });
 
-    socket.on('force_mute_voice', () => {
-        if (!localVoiceStatus.isMuted) {
+    socket.on('force_mute_voice', (data) => {
+        const action = data.action || 'mute';
+        if (action === 'mute' && !localVoiceStatus.isMuted) {
             document.getElementById('mute-btn').click();
             alert("⚠️ تم كتم ميكروفونك بواسطة المدير");
+        } else if (action === 'unmute' && localVoiceStatus.isMuted) {
+            document.getElementById('mute-btn').click();
+            alert("🔊 تم إلغاء كتم ميكروفونك بواسطة المدير");
         }
     });
 
@@ -545,8 +904,18 @@ function initSocket(token) {
         socket.emit('move_user_voice', { targetSocketId: socketId, targetRoomId: otherRoomId });
     };
 
-    window.requestForceMute = function (socketId) {
-        socket.emit('force_mute_user_voice', { targetSocketId: socketId });
+    window.toggleForceMute = function (socketId, currentMuted) {
+        if (currentMuted) {
+            socket.emit('force_unmute_user_voice', { targetSocketId: socketId });
+        } else {
+            socket.emit('force_mute_user_voice', { targetSocketId: socketId });
+        }
+    };
+
+    window.setUserVolume = function (socketId, volume) {
+        if (userAudios[socketId]) {
+            userAudios[socketId].volume = volume;
+        }
     };
 
     window.requestKickUser = function (socketId) {
@@ -584,6 +953,49 @@ function initSocket(token) {
         });
     });
 
+    document.getElementById('screen-share-btn').addEventListener('click', async () => {
+        if (screenStream) {
+            stopScreenShare();
+            return;
+        }
+
+        try {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            document.getElementById('screen-share-btn').classList.add('active');
+
+            screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
+
+            // Notify others in room
+            Object.keys(peerConnections).forEach(async (sid) => {
+                const pc = new RTCPeerConnection(ICE_SERVERS);
+                screenConnections[sid] = pc;
+                screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
+
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        socket.emit('screen_ice_candidate', { to: sid, candidate: event.candidate });
+                    }
+                };
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit('screen_signal', { to: sid, signal: offer });
+            });
+        } catch (e) {
+            console.error("Screen share error:", e);
+        }
+    });
+
+    function stopScreenShare() {
+        if (screenStream) {
+            screenStream.getTracks().forEach(t => t.stop());
+            screenStream = null;
+        }
+        Object.values(screenConnections).forEach(pc => pc.close());
+        screenConnections = {};
+        document.getElementById('screen-share-btn').classList.remove('active');
+    }
+
     let localVoiceStatus = { isMuted: false, isDeafened: false };
 
     document.getElementById('mute-btn').addEventListener('click', () => {
@@ -619,14 +1031,52 @@ function initSocket(token) {
         localVoiceStatus = { isMuted: false, isDeafened: false };
         document.getElementById('mute-btn').classList.remove('active');
         document.getElementById('deafen-btn').classList.remove('active');
+        userAudios = {};
     });
 
     document.getElementById('message-input').onkeypress = (e) => {
+        if (socket) socket.emit('typing', { isTyping: true });
+
+        clearTimeout(window.typingTimer);
+        window.typingTimer = setTimeout(() => {
+            if (socket) socket.emit('typing', { isTyping: false });
+        }, 2000);
+
         if (e.key === 'Enter' && e.target.value.trim() !== '') {
-            socket.emit('send_message', { text: e.target.value });
+            sendMessage(e.target.value);
             e.target.value = '';
         }
     };
+
+    // Music Bot Admin Controls
+    document.getElementById('play-music-btn').addEventListener('click', () => {
+        const url = document.getElementById('music-url').value;
+        if (url && (currentUser.role === 'admin' || currentUser.role === 'assistant')) {
+            socket.emit('play_music_req', { url });
+        }
+    });
+
+    document.getElementById('stop-music-btn').addEventListener('click', () => {
+        if (currentUser.role === 'admin' || currentUser.role === 'assistant') {
+            socket.emit('stop_music_req');
+        }
+    });
+}
+
+function sendMessage(text, attachment = null) {
+    if (!socket) return;
+
+    const payload = {
+        text: text,
+        ...attachment
+    };
+
+    if (activeContext.type === 'channel') {
+        socket.emit('send_message', payload);
+    } else {
+        payload.to = activeContext.id;
+        socket.emit('send_dm', payload);
+    }
 }
 
 function initSimulation() {
@@ -672,7 +1122,12 @@ function renderMessage(msg) {
 
     let tagHtml = '';
     let authorColor = '';
-    if (isAdmin) {
+
+    // Custom Role Display
+    if (msg.customRoleColor) {
+        authorColor = `color: ${msg.customRoleColor}`;
+        tagHtml = `<span class="admin-tag" style="background: ${msg.customRoleColor}">${msg.customRoleName || 'ROLE'}</span>`;
+    } else if (isAdmin) {
         tagHtml = '<span class="admin-tag">ADMIN</span>';
         authorColor = 'color: var(--admin-gold)';
     } else if (isAssistant) {
@@ -681,20 +1136,33 @@ function renderMessage(msg) {
     }
 
     const verifiedHtml = msg.isVerified ? '<span class="verified-badge" title="حساب موثق"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></span>' : '';
+    const avatarSrc = msg.avatar || 'logo.png';
+    const authorName = msg.author || msg.from;
+
+    let mediaHtml = '';
+    if (msg.file) {
+        if (msg.fileType && msg.fileType.startsWith('image/')) {
+            mediaHtml = `<img src="${msg.file}" class="message-image" onclick="window.open('${msg.file}')">`;
+        } else {
+            mediaHtml = `<div class="file-attachment">📂 <a href="${msg.file}" download="${msg.fileName}">${msg.fileName}</a></div>`;
+        }
+    }
 
     messageDiv.innerHTML = `
         <div class="message-avatar">
-            <img src="logo.png" style="width:100%; border-radius:50%">
+            <img src="${avatarSrc}" style="width:100%; height:100%; object-fit: cover; border-radius:50%">
         </div>
         <div class="message-content">
             <div class="message-header">
-                <span class="author" style="${authorColor}">${msg.author}</span>
+                <span class="author" style="${authorColor}">${authorName}</span>
+                <span class="user-level-badge">Lvl ${msg.level || 1}</span>
                 ${verifiedHtml}
                 ${tagHtml}
                 <span class="timestamp">${time}</span>
                 ${deleteHtml}
             </div>
-            <p class="text">${msg.text}</p>
+            <p class="text">${msg.text || ''}</p>
+            ${mediaHtml}
         </div>
     `;
     container.appendChild(messageDiv);
