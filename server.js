@@ -12,8 +12,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = 'rust_cord_secret_key_2024';
+const JWT_SECRET = process.env.JWT_SECRET || 'rust_cord_secret_key_2024';
+
 
 // --- TELEGRAM DATABASE CONFIG ---
 // ضع التوكن والايدي الخاص بك هنا
