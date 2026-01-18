@@ -2698,3 +2698,31 @@ textarea:focus {
         }
     }
 }
+
+/* Send Button */
+.send-btn {
+    background: none;
+    border: none;
+    color: var(--accent-brand);
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.send-btn:hover {
+    color: var(--accent-hover);
+    transform: scale(1.1);
+    background: rgba(222, 75, 57, 0.1);
+}
+
+.send-btn:active {
+    transform: scale(0.95);
+}
+
+.send-btn svg {
+    transition: var(--transition-smooth);
+}

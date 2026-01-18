@@ -639,14 +639,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        document.getElementById('send-btn').addEventListener('click', () => {
-            const input = document.getElementById('message-input');
-            if (input.value.trim() !== '') {
-                sendMessage(input.value);
-                input.value = '';
-                cancelReply();
-            }
-        });
+        const sendBtn = document.getElementById('send-btn');
+        if (sendBtn) {
+            sendBtn.addEventListener('click', () => {
+                const input = document.getElementById('message-input');
+                if (input.value.trim() !== '') {
+                    sendMessage(input.value);
+                    input.value = '';
+                    cancelReply();
+                }
+            });
+        }
+
 
         // Emoji Picker Logic
         const emojiTrigger = document.getElementById('emoji-trigger');
