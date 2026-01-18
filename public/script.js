@@ -717,11 +717,16 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('settings-avatar').value = currentUser.avatar;
         }
 
-        document.getElementById('settings-status-select').value = currentUser.status || 'online';
+        document.getElementById('settings-status').value = currentUser.status || 'online';
         document.getElementById('settings-custom-status').value = currentUser.customStatus || '';
 
-        const previewImg = document.querySelector('#settings-avatar-preview img');
-        if (previewImg) previewImg.src = currentUser.avatar || 'logo.png';
+        const avatarEl = document.getElementById('preview-avatar-circle');
+        if (avatarEl) {
+            const avatarUrl = currentUser.avatar || 'logo.png';
+            avatarEl.style.backgroundImage = `url('${avatarUrl}')`;
+            avatarEl.style.backgroundSize = 'cover';
+            avatarEl.style.backgroundPosition = 'center';
+        }
 
         const indicator = document.querySelector('#current-user-avatar .status-indicator');
         if (indicator) {
