@@ -363,6 +363,7 @@ function startApp(token, user) {
     localStorage.setItem('rc_sim_token', token);
     localStorage.setItem('rc_sim_user', JSON.stringify(user));
 
+    document.getElementById('auth-overlay').style.display = 'none';
     document.getElementById('app-main').style.display = 'flex';
     document.getElementById('display-username').innerText = user.username;
     document.getElementById('display-level').innerText = `Lvl ${user.level || 1}`;
