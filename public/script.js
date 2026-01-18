@@ -31,6 +31,10 @@ let processedStream = null;
 let userAudios = {}; // socketId -> Audio Element
 let screenStream = null;
 let screenConnections = {}; // socketId -> RTCPeerConnection (Screenshare)
+let socket = null;
+let currentUser = null;
+let isRegistering = false;
+let simulationMode = false;
 let activeContext = { type: 'channel', id: 'العامة', serverId: 'global-server' }; // { type: 'channel'|'dm', id: string, serverId: string }
 let currentTypingUsers = new Set();
 let replyingTo = null; // { id, author, text }
@@ -1670,6 +1674,8 @@ function initSocket(token) {
             socket.emit('join_voice', roomId);
 
             document.getElementById('voice-controls').style.display = 'flex';
+            document.getElementById('floating-voice-bar').style.display = 'flex';
+            document.getElementById('floating-room-name').innerText = roomName;
             document.querySelector('.voice-info .room-name').innerText = roomName;
             document.querySelectorAll('.voice-channel').forEach(c => c.classList.remove('active'));
             chan.classList.add('active');
@@ -1819,9 +1825,23 @@ function initSocket(token) {
         socket.emit('update_voice_status', localVoiceStatus);
     });
 
+    // Floating Voice Bar listeners
+    document.getElementById('float-mute-btn').addEventListener('click', () => {
+        document.getElementById('mute-btn').click();
+    });
+    document.getElementById('float-deafen-btn').addEventListener('click', () => {
+        document.getElementById('deafen-btn').click();
+    });
+    document.getElementById('float-leave-btn').addEventListener('click', () => {
+        document.getElementById('leave-voice-btn').click();
+    });
+
     document.getElementById('mute-btn').addEventListener('click', () => {
         localVoiceStatus.isMuted = !localVoiceStatus.isMuted;
         document.getElementById('mute-btn').classList.toggle('active', localVoiceStatus.isMuted);
+        const floatMute = document.getElementById('float-mute-btn');
+        if (floatMute) floatMute.classList.toggle('active', localVoiceStatus.isMuted);
+
         if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !localVoiceStatus.isMuted);
         socket.emit('update_voice_status', localVoiceStatus);
     });
@@ -1829,9 +1849,14 @@ function initSocket(token) {
     document.getElementById('deafen-btn').addEventListener('click', () => {
         localVoiceStatus.isDeafened = !localVoiceStatus.isDeafened;
         document.getElementById('deafen-btn').classList.toggle('active', localVoiceStatus.isDeafened);
+        const floatDeaf = document.getElementById('float-deafen-btn');
+        if (floatDeaf) floatDeaf.classList.toggle('active', localVoiceStatus.isDeafened);
+
         if (localVoiceStatus.isDeafened) {
             localVoiceStatus.isMuted = true;
             document.getElementById('mute-btn').classList.add('active');
+            const floatMute = document.getElementById('float-mute-btn');
+            if (floatMute) floatMute.classList.add('active');
             if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false);
         }
         socket.emit('update_voice_status', localVoiceStatus);
@@ -1840,6 +1865,7 @@ function initSocket(token) {
     document.getElementById('leave-voice-btn').addEventListener('click', () => {
         socket.emit('leave_voice');
         document.getElementById('voice-controls').style.display = 'none';
+        document.getElementById('floating-voice-bar').style.display = 'none';
         document.querySelectorAll('.voice-channel').forEach(c => c.classList.remove('active'));
 
         Object.values(peerConnections).forEach(pc => pc.close());
@@ -1858,6 +1884,10 @@ function initSocket(token) {
         localVoiceStatus = { isMuted: false, isDeafened: false, isSharingScreen: false, isVideoOn: false };
         document.getElementById('mute-btn').classList.remove('active');
         document.getElementById('deafen-btn').classList.remove('active');
+        const floatMute = document.getElementById('float-mute-btn');
+        const floatDeaf = document.getElementById('float-deafen-btn');
+        if (floatMute) floatMute.classList.remove('active');
+        if (floatDeaf) floatDeaf.classList.remove('active');
         userAudios = {};
     });
 
@@ -2114,9 +2144,12 @@ window.resolveServerRequest = function (requestId, action) {
 
 function renderServers(servers) {
     const sidebar = document.querySelector('.server-sidebar');
+    if (!sidebar) return;
     // Keep internal ones or clear and rebuild
-    const existingIcons = sidebar.querySelectorAll('.server-icon:not(.add-server)');
+    const existingIcons = sidebar.querySelectorAll('.server-icon:not(.add-server):not(.separator)');
     existingIcons.forEach(icon => icon.remove());
+
+    const addBtn = sidebar.querySelector('.add-server');
 
     servers.forEach(srv => {
         const div = document.createElement('div');
@@ -2124,14 +2157,14 @@ function renderServers(servers) {
         if (activeContext.serverId === srv._id) div.classList.add('active');
         div.title = srv.name;
 
-        if (srv.icon === 'logo.png') {
+        if (srv.icon === 'logo.png' || !srv.icon) {
             div.innerHTML = `<span class="server-initials">${srv.name.substring(0, 2)}</span>`;
         } else {
-            div.innerHTML = `<img src="${srv.icon}" alt="${srv.name}" style="width:100%">`;
+            div.innerHTML = `<img src="${srv.icon}" alt="${srv.name}" style="width:100%; border-radius:50%">`;
         }
 
         div.onclick = () => switchToServer(srv);
-        container.insertBefore(div, null);
+        sidebar.insertBefore(div, addBtn);
     });
 }
 
@@ -2162,14 +2195,16 @@ socket.on('user_typing', (data) => {
     }
 
     const indicator = document.getElementById('typing-indicator');
-    if (typingUsers.size === 0) {
-        indicator.innerText = '';
-    } else if (typingUsers.size === 1) {
-        indicator.innerText = `${[...typingUsers][0]} يكتب الآن...`;
-    } else if (typingUsers.size > 1 && typingUsers.size < 4) {
-        indicator.innerText = `${[...typingUsers].join(', ')} يكتبون الآن...`;
-    } else if (typingUsers.size >= 4) {
-        indicator.innerText = `عدة أشخاص يكتبون الآن...`;
+    if (indicator) {
+        if (typingUsers.size === 0) {
+            indicator.innerText = '';
+        } else if (typingUsers.size === 1) {
+            indicator.innerText = `${[...typingUsers][0]} يكتب الآن...`;
+        } else if (typingUsers.size > 1 && typingUsers.size < 4) {
+            indicator.innerText = `${[...typingUsers].join(', ')} يكتبون الآن...`;
+        } else if (typingUsers.size >= 4) {
+            indicator.innerText = `عدة أشخاص يكتبون الآن...`;
+        }
     }
 });
 
@@ -2184,15 +2219,21 @@ function switchToServer(server) {
     });
 
     // Update channels UI
-    document.querySelector('.sidebar-header h1').innerText = server.name;
+    const headerTitle = document.querySelector('.sidebar-header h1');
+    if (headerTitle) headerTitle.innerText = server.name;
 
     // Switch to first channel or default
     const channelName = (server.channels && server.channels.length > 0) ? server.channels[0].name : 'العامة';
     activeContext.id = channelName;
-    document.getElementById('current-channel-name').innerText = channelName;
-    document.getElementById('message-input').placeholder = `أرسل رسالة في #${channelName}`;
+    const channelDisplay = document.getElementById('current-channel-name');
+    if (channelDisplay) channelDisplay.innerText = channelName;
+    const input = document.getElementById('message-input');
+    if (input) input.placeholder = `أرسل رسالة في #${channelName}`;
 
     // Clear and reload messages for this server
-    document.getElementById('messages').innerHTML = '';
-    socket.emit('get_previous_messages', { serverId: server._id });
+    const msgContainer = document.getElementById('messages');
+    if (msgContainer) {
+        msgContainer.innerHTML = '';
+        socket.emit('get_previous_messages', { serverId: server._id });
+    }
 }

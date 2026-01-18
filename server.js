@@ -523,6 +523,15 @@ io.on('connection', async (socket) => {
         socket.emit('previous_messages', msgs);
     });
 
+    socket.on('typing', (data) => {
+        if (!socket.user) return;
+        socket.broadcast.emit('user_typing', {
+            username: socket.user.username,
+            isTyping: data.isTyping,
+            serverId: data.serverId || 'global-server'
+        });
+    });
+
     socket.on('send_message', (data) => {
         const user = localDb.users.find(u => u.username === socket.user.username);
         let customRoleColor = '';
@@ -580,14 +589,6 @@ io.on('connection', async (socket) => {
             io.emit('level_up', { username: user.username, level: user.level });
         }
         saveAndSyncDb(); // حفظ الرسائل أيضاً
-
-        socket.on('typing', (data) => {
-            socket.broadcast.emit('user_typing', {
-                username: socket.user.username,
-                isTyping: data.isTyping,
-                serverId: data.serverId || 'global-server'
-            });
-        });
 
         // --- BOT COMMANDS (#شغل) ---
         if (data.text && data.text.startsWith('#شغل')) {

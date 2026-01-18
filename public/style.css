@@ -2522,3 +2522,179 @@ textarea:focus {
 .screen-share-overlay:nth-of-type(3) {
     bottom: 460px;
 }
+
+/* Level Up Toast */
+.level-up-toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(45deg, var(--accent-rust), #ff7e5f);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-weight: bold;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    animation: slideInDown 0.5s ease-out, fadeOut 0.5s ease-in 4.5s;
+}
+
+@keyframes slideInDown {
+    from {
+        transform: translate(-50%, -100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translate(-50%, 0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+/* Floating Voice Bar (Discord Mobile Style) */
+.floating-voice-bar {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 31, 34, 0.7);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 30px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    z-index: 10000;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 320px;
+    justify-content: space-between;
+    animation: slideUpFloat 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes slideUpFloat {
+    from {
+        bottom: -100px;
+        opacity: 0;
+    }
+
+    to {
+        bottom: 30px;
+        opacity: 1;
+    }
+}
+
+.floating-voice-bar:hover {
+    background: rgba(43, 45, 49, 0.85);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateX(-50%) translateY(-5px);
+}
+
+.voice-bar-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pulse-icon {
+    width: 6px;
+    height: 6px;
+    background: #23a559;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #23a559;
+}
+
+@keyframes voicePulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+#floating-room-name {
+    color: white;
+    font-size: 14px;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.voice-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.float-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    color: #dbdee1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.float-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    transform: translateY(-2px);
+}
+
+.float-btn.active {
+    background: #ffffff;
+    color: #1a1a24;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
+.float-btn.exit {
+    background: #f04747;
+    color: white;
+}
+
+.float-btn.exit:hover {
+    background: #da373c;
+    box-shadow: 0 0 20px rgba(240, 71, 71, 0.4);
+}
+
+@media (max-width: 768px) {
+    .floating-voice-bar {
+        width: 95%;
+        bottom: 20px;
+        min-width: unset;
+        gap: 15px;
+        padding: 10px 15px;
+    }
+
+    @keyframes slideUpFloat {
+        from {
+            bottom: -100px;
+            opacity: 0;
+        }
+
+        to {
+            bottom: 20px;
+            opacity: 1;
+        }
+    }
+}
