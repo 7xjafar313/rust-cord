@@ -37,6 +37,7 @@ let isRegistering = false;
 let simulationMode = false;
 let activeContext = { type: 'channel', id: 'العامة', serverId: 'global-server' }; // { type: 'channel'|'dm', id: string, serverId: string }
 let currentTypingUsers = new Set();
+let typingTimeout = null;
 let replyingTo = null; // { id, author, text }
 let socketUsernameMap = {}; // socketId -> username for UI display
 
@@ -868,6 +869,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.on('roles_updated', (roles) => {
             renderRoles(roles);
+        });
+
+        socket.on('user_typing', (data) => {
+            if (data.serverId !== (activeContext.serverId || 'global-server')) return;
+
+            if (data.isTyping) {
+                currentTypingUsers.add(data.username);
+            } else {
+                currentTypingUsers.delete(data.username);
+            }
+
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) {
+                if (currentTypingUsers.size === 0) {
+                    indicator.innerText = '';
+                } else if (currentTypingUsers.size === 1) {
+                    indicator.innerText = `${[...currentTypingUsers][0]} يكتب الآن...`;
+                } else if (currentTypingUsers.size > 1 && currentTypingUsers.size < 4) {
+                    indicator.innerText = `${[...currentTypingUsers].join(', ')} يكتبون الآن...`;
+                } else if (currentTypingUsers.size >= 4) {
+                    indicator.innerText = `عدة أشخاص يكتبون الآن...`;
+                }
+            }
         });
 
         socket.on('previous_messages', (messages) => {
@@ -2225,45 +2249,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const typingUsers = new Set();
-    let typingTimeout = null;
+    // Message Input Typing Listener
+    const msgInput = document.getElementById('message-input');
+    if (msgInput) {
+        msgInput.addEventListener('input', () => {
+            if (socket) {
+                if (!typingTimeout) {
+                    socket.emit('typing', { isTyping: true, serverId: activeContext.serverId });
+                }
 
-    document.getElementById('message-input').addEventListener('input', () => {
-        if (socket) {
-            if (!typingTimeout) {
-                socket.emit('typing', { isTyping: true, serverId: activeContext.serverId });
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(() => {
+                    socket.emit('typing', { isTyping: false, serverId: activeContext.serverId });
+                    typingTimeout = null;
+                }, 3000);
             }
-
-            clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => {
-                socket.emit('typing', { isTyping: false, serverId: activeContext.serverId });
-                typingTimeout = null;
-            }, 3000);
-        }
-    });
-
-    socket.on('user_typing', (data) => {
-        if (data.serverId !== (activeContext.serverId || 'global-server')) return;
-
-        if (data.isTyping) {
-            typingUsers.add(data.username);
-        } else {
-            typingUsers.delete(data.username);
-        }
-
-        const indicator = document.getElementById('typing-indicator');
-        if (indicator) {
-            if (typingUsers.size === 0) {
-                indicator.innerText = '';
-            } else if (typingUsers.size === 1) {
-                indicator.innerText = `${[...typingUsers][0]} يكتب الآن...`;
-            } else if (typingUsers.size > 1 && typingUsers.size < 4) {
-                indicator.innerText = `${[...typingUsers].join(', ')} يكتبون الآن...`;
-            } else if (typingUsers.size >= 4) {
-                indicator.innerText = `عدة أشخاص يكتبون الآن...`;
-            }
-        }
-    });
+        });
+    }
 
     function switchToServer(server) {
         activeContext.serverId = server._id;
