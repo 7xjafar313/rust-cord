@@ -571,13 +571,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (user.role === 'admin' || user.role === 'assistant') {
             document.getElementById('display-role').innerText = user.role === 'admin' ? 'المدير العام' : 'مساعد القائد';
-            document.getElementById('admin-badge').style.display = 'block';
-            document.getElementById('admin-voice-effects').style.display = 'flex';
-            document.getElementById('admin-management-section').style.display = 'block';
-            document.getElementById('clear-chat-btn').style.display = 'flex';
+            const adminBadge = document.getElementById('admin-badge');
+            if (adminBadge) adminBadge.style.display = 'block';
+
+            const adminVoiceEffects = document.getElementById('admin-voice-effects');
+            if (adminVoiceEffects) adminVoiceEffects.style.display = 'flex';
+
+            const adminMgmt = document.getElementById('admin-management-section');
+            if (adminMgmt) adminMgmt.style.display = 'block';
+
+            const clearChat = document.getElementById('clear-chat-btn');
+            if (clearChat) clearChat.style.display = 'flex';
         } else {
             document.getElementById('display-role').innerText = 'عضو';
-            document.getElementById('clear-chat-btn').style.display = 'none';
+            const clearChat = document.getElementById('clear-chat-btn');
+            if (clearChat) clearChat.style.display = 'none';
         }
 
         if (token === 'sim-token') {
@@ -890,9 +898,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         socket.on('previous_messages', (messages) => {
-            messagesContainer.innerHTML = '';
-            messages.forEach(msg => renderMessage(msg));
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            if (messagesContainer) {
+                messagesContainer.innerHTML = '';
+                messages.forEach(msg => renderMessage(msg));
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
 
             // حفظ في الذاكرة المحلية للتطبيق
             const contextKey = `channel_${activeContext.serverId || 'global-server'}_${activeContext.id}`;
@@ -901,7 +911,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.on('new_message', (msg) => {
             renderMessage(msg);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
             // تحديث الذاكرة المحلية
             const contextKey = `channel_${msg.serverId || 'global-server'}_${msg.channelId || 'العامة'}`;
