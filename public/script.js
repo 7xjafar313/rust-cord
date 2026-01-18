@@ -147,6 +147,45 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('تم إرسال طلبك للإدارة للموافقة.');
     };
 
+    // Mobile Menu Toggle
+    const mobileMenuTrigger = document.getElementById('mobile-menu-trigger');
+    const channelSidebar = document.querySelector('.channel-sidebar');
+
+    if (mobileMenuTrigger) {
+        mobileMenuTrigger.onclick = (e) => {
+            e.stopPropagation();
+            channelSidebar.classList.toggle('show');
+        };
+    }
+
+    // Close sidebar on mobile when clicking a channel
+    document.querySelectorAll('.channel-item, .dm-user-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                channelSidebar.classList.remove('show');
+            }
+        });
+    });
+
+    // Close sidebar on mobile when clicking anywhere else
+    document.addEventListener('click', (e) => {
+        if (window.innerWidth <= 768 && channelSidebar.classList.contains('show')) {
+            if (!channelSidebar.contains(e.target) && e.target !== mobileMenuTrigger) {
+                channelSidebar.classList.remove('show');
+            }
+        }
+    });
+
+    // Members Sidebar Toggle
+    const membersTrigger = document.querySelector('button[title="قائمة الأعضاء"]');
+    const membersSidebar = document.querySelector('.members-sidebar');
+
+    if (membersTrigger && membersSidebar) {
+        membersTrigger.onclick = () => {
+            membersSidebar.classList.toggle('show');
+        };
+    }
+
     async function loadServerRequests() {
         if (!socket) return;
         socket.emit('get_server_requests');
@@ -271,7 +310,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('rc_user', JSON.stringify(currentUser));
                 settingsOverlay.style.display = 'none';
 
-                if (socket) socket.emit('update_status', { status: currentUser.status, customStatus: currentUser.customStatus });
+                if (socket) {
+                    socket.emit('update_status', { status: currentUser.status, customStatus: currentUser.customStatus });
+                    socket.emit('get_online_users'); // Refresh everyone's list
+                }
             } else {
                 alert(data.error);
             }
@@ -512,10 +554,39 @@ function updateUIForUser() {
     document.getElementById('settings-status-select').value = currentUser.status || 'online';
     document.getElementById('settings-custom-status').value = currentUser.customStatus || '';
 
+    const previewImg = document.querySelector('#settings-avatar-preview img');
+    if (previewImg) previewImg.src = currentUser.avatar || 'logo.png';
+
     const indicator = document.querySelector('#current-user-avatar .status-indicator');
     if (indicator) {
         indicator.className = 'status-indicator ' + (currentUser.status || 'online');
     }
+}
+
+function renderMembersList(members) {
+    const container = document.getElementById('members-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+    members.forEach(member => {
+        const memberDiv = document.createElement('div');
+        memberDiv.className = 'dm-user-item'; // Reuse styles
+        const verifiedHtml = member.isVerified ? '<span class="verified-badge" title="حساب موثق" style="margin-left:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></span>' : '';
+        const roleColor = (member.role === 'admin') ? 'var(--admin-gold)' : (member.role === 'assistant' ? 'var(--assistant-gold)' : '');
+
+        memberDiv.innerHTML = `
+            <div class="dm-user-avatar">
+                <img src="${member.avatar || 'logo.png'}" style="width:100%; height:100%; object-fit: cover;">
+                <div class="status-indicator-mini ${member.status || 'online'}"></div>
+            </div>
+            <div class="dm-user-info">
+                <span class="dm-username" style="color: ${roleColor}">${member.username}${verifiedHtml}</span>
+                <span class="dm-status">${member.customStatus || (member.status === 'online' ? 'متصل' : (member.status === 'dnd' ? 'يرجى عدم الإزعاج' : 'خامل'))}</span>
+            </div>
+        `;
+        memberDiv.onclick = () => switchToDM(member.username);
+        container.appendChild(memberDiv);
+    });
 }
 
 function switchToChannel(channelName) {
@@ -603,6 +674,10 @@ function initSocket(token) {
         updateDMList(msg);
     });
 
+    socket.on('update_members_list', (members) => {
+        renderMembersList(members);
+    });
+
     socket.on('user_typing', (data) => {
         if (data.isTyping) currentTypingUsers.add(data.username);
         else currentTypingUsers.delete(data.username);
@@ -665,13 +740,6 @@ function initSocket(token) {
 
     socket.on('my_servers_list', (servers) => {
         renderServers(servers);
-    });
-
-    socket.on('server_approved', (data) => {
-        if (data.userId === currentUser.id) {
-            alert(`✅ تم قبول طلبك لإنشاء سيرفر "${data.server.name}"!`);
-            socket.emit('get_my_servers');
-        }
     });
 
     socket.on('server_rejected', (data) => {
@@ -762,6 +830,27 @@ function initSocket(token) {
         processedStream = destination.stream;
         return processedStream;
     }
+
+    // --- SETTINGS PREVIEW LOGIC ---
+    const avatarInput = document.getElementById('settings-avatar');
+    const avatarFileInput = document.getElementById('avatar-file-input');
+    const avatarPreviewImg = document.querySelector('#settings-avatar-preview img');
+
+    avatarInput.addEventListener('input', () => {
+        if (avatarInput.value) avatarPreviewImg.src = avatarInput.value;
+    });
+
+    avatarFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                avatarPreviewImg.src = event.target.result;
+                avatarInput.value = event.target.result; // Put base64 in the URL input for convenience
+            };
+            reader.readAsDataURL(file);
+        }
+    });
 
     document.querySelectorAll('.effect-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -878,7 +967,18 @@ function initSocket(token) {
             screenConnections[data.from] = pc;
 
             pc.ontrack = (event) => {
-                showRemoteScreen(data.from, event.streams[0]);
+                const stream = event.streams[0];
+                showRemoteScreen(data.from, stream);
+
+                // Remove video when stream ends
+                stream.getVideoTracks()[0].onended = () => {
+                    const videoWrap = document.getElementById(`screen-video-${data.from}`);
+                    if (videoWrap) videoWrap.remove();
+                    if (screenConnections[data.from]) {
+                        screenConnections[data.from].close();
+                        delete screenConnections[data.from];
+                    }
+                };
             };
 
             pc.onicecandidate = (event) => {
@@ -952,6 +1052,7 @@ function initSocket(token) {
 
             // 2. إنشاء اتصالات جديدة (فقط إذا كان معرف السوكيت الخاص بي أكبر لتجنب التصادم)
             for (const user of otherUsers) {
+                // Voice Connection
                 if (!peerConnections[user.socketId] && socket.id > user.socketId) {
                     if (localStream) {
                         console.log(`📡 Initiating call to: ${user.username} (${user.socketId})`);
@@ -959,6 +1060,12 @@ function initSocket(token) {
                     } else {
                         console.warn("⚠️ Cannot initiate call: localStream is not ready");
                     }
+                }
+
+                // Auto-share screen if already sharing
+                if (screenStream && !screenConnections[user.socketId]) {
+                    console.log(`🖥️ Auto-sharing screen with joining user: ${user.username}`);
+                    await shareScreenWith(user.socketId);
                 }
             }
         } else if (!myRoomId) {
@@ -1109,6 +1216,29 @@ function initSocket(token) {
         });
     });
 
+    async function shareScreenWith(sid) {
+        if (!screenStream || screenConnections[sid]) return;
+
+        try {
+            const pc = new RTCPeerConnection(ICE_SERVERS);
+            screenConnections[sid] = pc;
+
+            screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('screen_ice_candidate', { to: sid, candidate: event.candidate });
+                }
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('screen_signal', { to: sid, signal: offer });
+        } catch (err) {
+            console.error(`Failed to share screen with ${sid}:`, err);
+        }
+    }
+
     document.getElementById('screen-share-btn').addEventListener('click', async () => {
         if (screenStream) {
             stopScreenShare();
@@ -1126,19 +1256,7 @@ function initSocket(token) {
 
             // Notify others in room
             Object.keys(peerConnections).forEach(async (sid) => {
-                const pc = new RTCPeerConnection(ICE_SERVERS);
-                screenConnections[sid] = pc;
-                screenStream.getTracks().forEach(track => pc.addTrack(track, screenStream));
-
-                pc.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        socket.emit('screen_ice_candidate', { to: sid, candidate: event.candidate });
-                    }
-                };
-
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit('screen_signal', { to: sid, signal: offer });
+                await shareScreenWith(sid);
             });
         } catch (e) {
             console.error("Screen share error:", e);

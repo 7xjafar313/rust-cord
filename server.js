@@ -445,9 +445,47 @@ io.use((socket, next) => {
 });
 
 io.on('connection', async (socket) => {
+    // إرسالة قائمة الأعضاء المتصلين لجميع المستخدمين
+    const broadcastOnlineUsers = () => {
+        const onlineUsers = [];
+        const seenUserIds = new Set();
+
+        // Get all connected sockets and their associated users
+        for (const [id, s] of io.sockets.sockets) {
+            if (s.user && !seenUserIds.has(s.user.id)) {
+                const userData = localDb.users.find(u => u._id === s.user.id);
+                if (userData) {
+                    onlineUsers.push({
+                        id: userData._id,
+                        username: userData.username,
+                        avatar: userData.avatar,
+                        status: userData.status,
+                        customStatus: userData.customStatus,
+                        role: userData.role,
+                        isVerified: userData.isVerified,
+                        level: userData.level
+                    });
+                    seenUserIds.add(s.user.id);
+                }
+            }
+        }
+        io.emit('update_members_list', onlineUsers);
+    };
+
+    broadcastOnlineUsers();
+
+    // إرسال قائمة السيرفرات الخاصة بالمستخدم فور الاتصال
+    const sendMyServers = () => {
+        const myServers = localDb.servers.filter(s =>
+            s.ownerId === 'system' ||
+            s.ownerId === socket.user.id ||
+            s.members.includes(socket.user.id)
+        );
+        socket.emit('my_servers_list', myServers);
+    };
+    sendMyServers();
+
     // إرسال آخر 50 رسالة من السيرفر الحالي (الافتراضي: العالمي)
-    const recentMessages = localDb.messages.filter(m => !m.serverId || m.serverId === 'global-server').slice(-50);
-    socket.emit('previous_messages', recentMessages);
 
     socket.on('get_previous_messages', (data) => {
         const serverId = data ? data.serverId : 'global-server';
@@ -585,8 +623,24 @@ io.on('connection', async (socket) => {
             });
 
             io.emit('voice_state_update', voiceRooms);
+            broadcastOnlineUsers();
             saveAndSyncDb();
         }
+    });
+
+    socket.on('get_online_users', () => {
+        broadcastOnlineUsers();
+    });
+
+    socket.on('update_voice_status', (data) => {
+        Object.keys(voiceRooms).forEach(roomId => {
+            const member = voiceRooms[roomId].find(u => u.socketId === socket.id);
+            if (member) {
+                member.isMuted = data.isMuted;
+                member.isDeafened = data.isDeafened;
+            }
+        });
+        io.emit('voice_state_update', voiceRooms);
     });
 
     socket.on('screen_signal', (data) => {
@@ -594,6 +648,25 @@ io.on('connection', async (socket) => {
             signal: data.signal,
             from: socket.id
         });
+    });
+
+    socket.on('screen_ice_candidate', (data) => {
+        io.to(data.to).emit('screen_ice_candidate', {
+            candidate: data.candidate,
+            from: socket.id
+        });
+    });
+
+    socket.on('update_voice_status', (data) => {
+        Object.keys(voiceRooms).forEach(roomId => {
+            const member = voiceRooms[roomId].find(u => u.socketId === socket.id);
+            if (member) {
+                member.isMuted = data.isMuted;
+                member.isDeafened = data.isDeafened;
+                console.log(`🎙️ User ${member.username} logic: Muted=${member.isMuted}, Deafened=${member.isDeafened}`);
+            }
+        });
+        io.emit('voice_state_update', voiceRooms);
     });
 
     socket.on('leave_voice', () => {
@@ -608,6 +681,7 @@ io.on('connection', async (socket) => {
             voiceRooms[id] = voiceRooms[id].filter(u => u.userId !== socket.user.id);
         });
         io.emit('voice_state_update', voiceRooms);
+        broadcastOnlineUsers();
     });
 
     // --- DIRECT MESSAGES ---
@@ -752,12 +826,7 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('get_my_servers', () => {
-        const myServers = localDb.servers.filter(s =>
-            s.ownerId === 'system' ||
-            s.ownerId === socket.user.id ||
-            s.members.includes(socket.user.id)
-        );
-        socket.emit('my_servers_list', myServers);
+        sendMyServers();
     });
     socket.on('voice_signal', (data) => {
         // Relay signal from sender to specific recipient

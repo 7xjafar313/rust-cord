@@ -52,13 +52,7 @@
     <div class="app-container" style="display: none;" id="app-main">
         <!-- Sidebar: Servers -->
         <aside class="server-sidebar">
-            <div class="server-icon active" title="Rust Cord">
-                <span class="server-initials">RC</span>
-            </div>
             <div class="separator"></div>
-            <div class="server-icon" title="Server 1">
-                <img src="logo.png" alt="S1" style="width:100%">
-            </div>
             <div class="server-icon add-server" title="إضافة سيرفر">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -277,6 +271,18 @@
                                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                                 <circle cx="12" cy="7" r="4"></circle>
                             </svg>المعلومات الشخصية</h3>
+                        <div class="settings-profile-preview">
+                            <div class="avatar-big" id="settings-avatar-preview">
+                                <img src="logo.png" alt="Avatar">
+                            </div>
+                            <div class="avatar-controls">
+                                <button class="secondary-btn"
+                                    onclick="document.getElementById('avatar-file-input').click()">اختيار صورة</button>
+                                <input type="file" id="avatar-file-input" style="display: none;" accept="image/*">
+                                <p style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">أو ضع رابط صورة
+                                    أدناه:</p>
+                            </div>
+                        </div>
                         <div class="input-group">
                             <label>رابط الصورة الشخصية</label>
                             <input type="text" id="settings-avatar" placeholder="أدخل رابط الصورة (URL)">
@@ -421,6 +427,14 @@
         <main class="chat-area">
             <header class="chat-header">
                 <div class="header-left">
+                    <button class="icon-btn mobile-menu-btn" id="mobile-menu-trigger" style="display: none;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </button>
                     <span class="hashtag"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2">
                             <line x1="4" y1="9" x2="20" y2="9"></line>
