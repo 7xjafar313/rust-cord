@@ -366,23 +366,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Admin Sub-tabs Navigation
-    document.querySelectorAll('.admin-tab-nav-premium .tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.admin-tab-nav-premium .tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const tab = btn.getAttribute('data-tab');
-            document.querySelectorAll('.admin-tab-content').forEach(p => p.classList.remove('active')); // Use class toggling or display
-            document.querySelectorAll('.admin-tab-content').forEach(p => p.style.display = 'none');
-
-            const panel = document.getElementById(tab);
-            if (panel) {
-                panel.style.display = 'block';
-                panel.classList.add('active');
-            }
-        });
-    });
-
     window.updateSettingsUI = function (user) {
         if (!document.getElementById('settings-display-username')) return;
 
@@ -1883,16 +1866,7 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('update_voice_status', localVoiceStatus);
         });
 
-        // Floating Voice Bar listeners
-        document.getElementById('float-mute-btn').addEventListener('click', () => {
-            document.getElementById('mute-btn').click();
-        });
-        document.getElementById('float-deafen-btn').addEventListener('click', () => {
-            document.getElementById('deafen-btn').click();
-        });
-        document.getElementById('float-leave-btn').addEventListener('click', () => {
-            document.getElementById('leave-voice-btn').click();
-        });
+        // Floating Voice Bar listeners (REMOVED)
 
         document.getElementById('mute-btn').addEventListener('click', () => {
             localVoiceStatus.isMuted = !localVoiceStatus.isMuted;
