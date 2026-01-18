@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Cord | راست كورد</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Servers Sidebar -->
+        <nav class="servers-sidebar">
+            <div class="server-icon active" title="راست كورد الرسمي">
+                <i class="fab fa-rust" style="color: #ce412b;"></i>
+            </div>
+            <div class="separator"></div>
+            <div class="server-icon" title="سيرفر التجربة">
+                <img src="https://i.ibb.co/Lkhm5Hz/rust-icon.png" alt="Rust"
+                    onerror="this.src='https://via.placeholder.com/48?text=RC'">
+            </div>
+            <div class="server-icon" title="برمجة">
+                <i class="fas fa-code"></i>
+            </div>
+            <div class="server-icon add-server" title="إضافة سيرفر">
+                <i class="fas fa-plus"></i>
+            </div>
+            <div class="server-icon discover" title="اكتشاف">
+                <i class="fas fa-compass"></i>
+            </div>
+        </nav>
+
+        <!-- Channels Sidebar -->
+        <aside class="channels-sidebar">
+            <header class="sidebar-header">
+                <h1>راست كورد</h1>
+                <i class="fas fa-chevron-down"></i>
+            </header>
+            <div class="channels-list">
+                <div class="channel-category">
+                    <span class="category-name"><i class="fas fa-chevron-down"></i> المعلومات</span>
+                    <div class="channel text-channel">
+                        <i class="fas fa-info-circle"></i>
+                        <span>القوانين</span>
+                    </div>
+                    <div class="channel text-channel">
+                        <i class="fas fa-bullhorn"></i>
+                        <span>الإعلانات</span>
+                    </div>
+                </div>
+                <div class="channel-category">
+                    <span class="category-name"><i class="fas fa-chevron-down"></i> قنوات النصية</span>
+                    <div class="channel text-channel active">
+                        <i class="fas fa-hashtag"></i>
+                        <span>العام</span>
+                    </div>
+                    <div class="channel text-channel">
+                        <i class="fas fa-hashtag"></i>
+                        <span>صور-ومعمول</span>
+                    </div>
+                    <div class="channel text-channel">
+                        <i class="fas fa-hashtag"></i>
+                        <span>اقتراحات</span>
+                    </div>
+                </div>
+                <div class="channel-category">
+                    <span class="category-name"><i class="fas fa-chevron-down"></i> قنوات صوتية</span>
+                    <div class="channel voice-channel">
+                        <i class="fas fa-volume-up"></i>
+                        <span>ديوانية</span>
+                    </div>
+                    <div class="channel voice-channel">
+                        <i class="fas fa-volume-up"></i>
+                        <span>لعب</span>
+                    </div>
+                </div>
+            </div>
+            <div class="user-controls">
+                <div class="user-info">
+                    <div class="avatar-wrapper">
+                        <img src="https://via.placeholder.com/32" alt="User">
+                        <div class="status online"></div>
+                    </div>
+                    <div class="user-details">
+                        <span class="username">المستخدم</span>
+                        <span class="user-tag">#0001</span>
+                    </div>
+                </div>
+                <div class="control-buttons">
+                    <i class="fas fa-microphone" title="Mute"></i>
+                    <i class="fas fa-headphones" title="Deafen"></i>
+                    <i class="fas fa-cog" title="Settings"></i>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area">
+            <header class="chat-header">
+                <div class="header-info">
+                    <i class="fas fa-hashtag"></i>
+                    <h2>العام</h2>
+                </div>
+                <div class="header-actions">
+                    <i class="fas fa-bell"></i>
+                    <i class="fas fa-thumbtack"></i>
+                    <i class="fas fa-users"></i>
+                    <div class="search-bar">
+                        <input type="text" placeholder="بحث">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <i class="fas fa-question-circle"></i>
+                </div>
+            </header>
+            <div class="messages-container">
+                <div class="message">
+                    <img src="https://via.placeholder.com/40" alt="Avatar" class="message-avatar">
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="message-author">المطور</span>
+                            <span class="message-timestamp">اليوم الساعة 10:00 م</span>
+                        </div>
+                        <div class="message-text">أهلاً بكم في راست كورد! أفضل بديل لديسكورد.</div>
+                    </div>
+                </div>
+                <div class="message">
+                    <img src="https://via.placeholder.com/40" alt="Avatar" class="message-avatar">
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="message-author">زائر</span>
+                            <span class="message-timestamp">اليوم الساعة 10:05 م</span>
+                        </div>
+                        <div class="message-text">التصميم يبدو رائعاً جداً.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="message-input-wrapper">
+                <div class="message-input">
+                    <i class="fas fa-plus-circle"></i>
+                    <input type="text" placeholder="إرسال رسالة إلى #العام">
+                    <div class="input-icons">
+                        <i class="fas fa-gift"></i>
+                        <i class="fas fa-sticky-note"></i>
+                        <i class="fas fa-smile"></i>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Members Sidebar -->
+        <aside class="members-sidebar">
+            <div class="member-category">متصل — 2</div>
+            <div class="member-item">
+                <div class="avatar-wrapper">
+                    <img src="https://via.placeholder.com/32" alt="User">
+                    <div class="status online"></div>
+                </div>
+                <div class="member-info">
+                    <span class="member-name admin">المطور</span>
+                    <span class="member-activity">يلعب Rust Cord</span>
+                </div>
+            </div>
+            <div class="member-item">
+                <div class="avatar-wrapper">
+                    <img src="https://via.placeholder.com/32" alt="User">
+                    <div class="status online"></div>
+                </div>
+                <div class="member-info">
+                    <span class="member-name">زائر</span>
+                </div>
+            </div>
+        </aside>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
