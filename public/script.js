@@ -555,6 +555,15 @@ function startApp(token, user) {
 
     document.getElementById('cancel-reply').onclick = cancelReply;
 
+    document.addEventListener('click', () => {
+        if (ytPlayer && ytPlayer.getPlayerState) {
+            const state = ytPlayer.getPlayerState();
+            if (state === 2 || state === 5) { // Paused or Cued
+                ytPlayer.playVideo();
+            }
+        }
+    }, { once: false });
+
     // Clear Chat Logic
     const clearChatBtn = document.getElementById('clear-chat-btn');
     if (clearChatBtn) {
@@ -762,18 +771,23 @@ function initSocket(token) {
 
         if (!ytPlayer && ytApiReady) {
             ytPlayer = new YT.Player('youtube-player-container', {
-                height: '0',
-                width: '0',
+                height: '1',
+                width: '1',
                 videoId: data.videoId,
-                playerVars: { 'autoplay': 1, 'controls': 0 },
+                playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1 },
                 events: {
-                    'onReady': (event) => event.target.playVideo(),
+                    'onReady': (event) => {
+                        event.target.playVideo();
+                        event.target.unMute();
+                        event.target.setVolume(100);
+                    },
                     'onError': (e) => console.error("YT Error:", e)
                 }
             });
         } else if (ytPlayer && ytPlayer.loadVideoById) {
             ytPlayer.loadVideoById(data.videoId);
             ytPlayer.playVideo();
+            ytPlayer.unMute();
         }
     });
 

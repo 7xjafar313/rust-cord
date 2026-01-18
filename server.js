@@ -579,6 +579,33 @@ io.on('connection', async (socket) => {
                     }
 
                     if (videoId) {
+                        // Find user's room to "join" it
+                        let userRoomId = null;
+                        Object.keys(voiceRooms).forEach(rid => {
+                            if (voiceRooms[rid].find(u => u.socketId === socket.id)) userRoomId = rid;
+                        });
+
+                        if (userRoomId) {
+                            // Remove bot from any other room first
+                            Object.keys(voiceRooms).forEach(rid => {
+                                voiceRooms[rid] = voiceRooms[rid].filter(u => u.userId !== 'bot-id');
+                            });
+                            // Add bot to the room
+                            voiceRooms[userRoomId].push({
+                                userId: 'bot-id',
+                                socketId: 'bot-socket',
+                                username: 'راست بوت 🤖',
+                                role: 'admin',
+                                isVerified: true,
+                                avatar: 'logo.png', // Or a bot icon
+                                status: 'online',
+                                customStatus: '🎶 يستمع للموسيقى',
+                                isMuted: false,
+                                isDeafened: false
+                            });
+                            io.emit('voice_state_update', voiceRooms);
+                        }
+
                         const botMsg = {
                             _id: 'bot-' + Date.now(),
                             author: 'راست بوت 🤖',
@@ -604,6 +631,12 @@ io.on('connection', async (socket) => {
                 })();
             }
         } else if (data.text && data.text.startsWith('#ايقاف')) {
+            // Remove bot from voice rooms
+            Object.keys(voiceRooms).forEach(rid => {
+                voiceRooms[rid] = voiceRooms[rid].filter(u => u.userId !== 'bot-id');
+            });
+            io.emit('voice_state_update', voiceRooms);
+
             const botMsg = {
                 _id: 'bot-' + Date.now(),
                 author: 'راست بوت 🤖',
