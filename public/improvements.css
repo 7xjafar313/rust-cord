@@ -1,0 +1,365 @@
+/* 
+ * ملف التحسينات الإضافية لـ Rust Cord
+ * أضف هذا الكود في نهاية ملف style.css
+ */
+
+/* ===================================
+   زر الإرسال - Send Button
+   =================================== */
+
+.send-btn {
+    background: none;
+    border: none;
+    color: var(--accent-brand);
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.send-btn:hover {
+    color: var(--accent-hover);
+    transform: scale(1.1);
+    background: rgba(222, 75, 57, 0.1);
+}
+
+.send-btn:active {
+    transform: scale(0.95);
+}
+
+.send-btn svg {
+    transition: var(--transition-smooth);
+}
+
+/* ===================================
+   تحسينات عرض الصور
+   =================================== */
+
+.image-wrapper {
+    margin-top: 8px;
+    display: block;
+    max-width: 100%;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.message-image {
+    max-width: 400px;
+    max-height: 300px;
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: block;
+    object-fit: contain;
+}
+
+.message-image:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Loading state for images */
+.message-image[src=""] {
+    min-width: 200px;
+    min-height: 200px;
+    background: linear-gradient(90deg,
+            rgba(255, 255, 255, 0.05) 25%,
+            rgba(255, 255, 255, 0.1) 50%,
+            rgba(255, 255, 255, 0.05) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* ===================================
+   تحسينات مشاركة الشاشة
+   =================================== */
+
+.screens-container {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+.screen-share-overlay {
+    background: var(--bg-dark-800);
+    border: 2px solid var(--accent-brand);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    transition: var(--transition-smooth);
+    width: 320px;
+}
+
+.screen-share-overlay.fullscreen {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90vw;
+    height: 90vh;
+    max-width: 1200px;
+    max-height: 800px;
+    z-index: 2000;
+}
+
+.screen-header {
+    background: rgba(0, 0, 0, 0.5);
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.screen-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.screen-controls button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: var(--transition-smooth);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.screen-controls button:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.screen-share-overlay video {
+    width: 100%;
+    height: auto;
+    display: block;
+    background: black;
+}
+
+.screen-share-overlay.fullscreen video {
+    height: calc(100% - 40px);
+    object-fit: contain;
+}
+
+/* ===================================
+   تحسينات أزرار الصوت
+   =================================== */
+
+.icon-btn {
+    position: relative;
+    transition: var(--transition-smooth);
+}
+
+.icon-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    width: 100%;
+    height: 100%;
+    background: var(--accent-brand);
+    border-radius: 4px;
+    opacity: 0;
+    transition: var(--transition-smooth);
+}
+
+.icon-btn:active::after {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 0.3;
+    transition: none;
+}
+
+.icon-btn.active {
+    color: var(--accent-brand);
+    background: rgba(222, 75, 57, 0.1);
+}
+
+/* Feedback animation for voice buttons */
+@keyframes buttonPress {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(0.95);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.icon-btn:active {
+    animation: buttonPress 0.2s ease;
+}
+
+/* ===================================
+   تحسينات السيرفرات
+   =================================== */
+
+.server-icon {
+    position: relative;
+    overflow: visible;
+}
+
+.server-icon::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%) scaleY(0);
+    width: 8px;
+    height: 40px;
+    background-color: white;
+    border-radius: 0 4px 4px 0;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.server-icon.active::before {
+    transform: translateY(-50%) scaleY(1);
+}
+
+.server-icon:hover::before {
+    transform: translateY(-50%) scaleY(0.5);
+}
+
+/* Server notification badge */
+.server-icon .notification-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--dnd-red);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    border: 2px solid var(--bg-sidebar);
+    min-width: 18px;
+    text-align: center;
+}
+
+/* ===================================
+   تحسينات عامة للأداء
+   =================================== */
+
+/* Smooth scrolling for all containers */
+.messages-container,
+.members-list,
+.channels-list,
+.server-sidebar {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Hardware acceleration for animations */
+.message,
+.server-icon,
+.channel-item,
+.icon-btn,
+.send-btn {
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ===================================
+   تحسينات الاستجابة (Mobile)
+   =================================== */
+
+@media (max-width: 768px) {
+    .screen-share-overlay {
+        width: calc(100vw - 40px);
+    }
+
+    .message-image {
+        max-width: 100%;
+    }
+
+    .screens-container {
+        right: 10px;
+        left: 10px;
+        bottom: 60px;
+    }
+}
+
+/* ===================================
+   تحسينات إضافية
+   =================================== */
+
+/* Better focus states */
+button:focus-visible,
+input:focus-visible {
+    outline: 2px solid var(--accent-brand);
+    outline-offset: 2px;
+}
+
+/* Loading spinner */
+.loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--accent-brand);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Success/Error toast improvements */
+.level-up-toast {
+    animation: slideInRight 0.3s ease, fadeOut 0.3s ease 4.7s;
+}
+
+@keyframes fadeOut {
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+/* ===================================
+   نهاية التحسينات
+   =================================== */
