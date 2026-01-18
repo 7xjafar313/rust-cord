@@ -4,72 +4,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rust Cord | راست كورد - نظام متكامل</title>
+    <title>Rust Cord | راست كورد</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#de4b39">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="icon" type="image/png" href="logo.png">
-    <link rel="apple-touch-icon" href="logo.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="icon" href="logo.png">
     <link
-        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Alexandria:wght@300;400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap"
         rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://www.youtube.com/iframe_api"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('Service Worker Registered'))
-                    .catch(err => console.log('SW Registration Failed', err));
-            });
-        }
-    </script>
 </head>
 
 <body>
-    <!-- Login Overlay -->
+    <!-- Auth Overlay -->
     <div id="auth-overlay" class="auth-overlay">
         <div class="auth-box">
-            <img src="logo.png" alt="RC" class="auth-logo">
+            <img src="logo.png" alt="Rust Cord Logo" class="auth-logo">
             <h2 id="auth-title">تسجيل الدخول إلى راست كورد</h2>
-            <div class="input-group">
-                <label><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2" style="vertical-align: middle; margin-left: 5px;">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
-                    </svg>اسم المستخدم</label>
-                <input type="text" id="auth-username" placeholder="أدخل اسم المستخدم">
-            </div>
-            <div class="input-group" id="email-group" style="display: none;">
-                <label><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2" style="vertical-align: middle; margin-left: 5px;">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                        <polyline points="22,6 12,13 2,6"></polyline>
-                    </svg>البريد الإلكتروني</label>
-                <input type="email" id="auth-email" placeholder="أدخل البريد الإلكتروني">
+            <div id="email-group" class="input-group" style="display: none;">
+                <label>البريد الإلكتروني</label>
+                <input type="email" id="auth-email" placeholder="name@example.com">
             </div>
             <div class="input-group">
-                <label><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2" style="vertical-align: middle; margin-left: 5px;">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                    </svg>كلمة المرور</label>
-                <input type="password" id="auth-password" placeholder="أدخل كلمة المرور">
+                <label>اسم المستخدم</label>
+                <input type="text" id="auth-username" placeholder="Username">
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور</label>
+                <input type="password" id="auth-password" placeholder="Password">
             </div>
             <button id="auth-btn" class="primary-btn">تسجيل الدخول</button>
             <p class="auth-switch">ليس لديك حساب؟ <span id="switch-to-register">إنشاء حساب</span></p>
         </div>
     </div>
 
-    <div class="app-container" style="display: none;" id="app-main">
-        <!-- Sidebar: Servers -->
+    <!-- Main App Container -->
+    <div id="app-main" class="app-container" style="display: none;">
+        <!-- Server Sidebar -->
         <aside class="server-sidebar">
+            <div class="server-icon global active" title="السيرفر العالمي">
+                <img src="logo.png" alt="Global" style="width: 100%; border-radius: 50%;">
+            </div>
             <div class="separator"></div>
-            <div class="server-icon add-server" title="إضافة سيرفر">
+            <div class="server-icon add-server" id="add-server-btn" title="إضافة سيرفر">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -77,71 +53,48 @@
             </div>
         </aside>
 
-        <!-- Sidebar: Channels -->
-        <aside class="channel-sidebar">
-            <header class="sidebar-header" id="invite-trigger">
+        <!-- Channels Sidebar -->
+        <aside class="channels-sidebar">
+            <header class="sidebar-header">
                 <h1>راست كورد</h1>
-                <div class="invite-badge">دعوة +</div>
+                <div class="header-actions">
+                    <button id="invite-trigger" class="icon-btn-small" title="نسخ رابط الدعوة">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="8.5" cy="7" r="4"></circle>
+                            <line x1="20" y1="8" x2="20" y2="14"></line>
+                        </svg>
+                    </button>
+                </div>
             </header>
 
-            <div class="channel-list">
-                <div class="channel-category">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        style="margin-left: 4px;">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    <span>قنوات نصية</span>
-                </div>
-                <div class="channel-item active">
-                    <span class="hashtag">#</span>
+            <div class="channels-list">
+                <div class="category">القنوات النصية</div>
+                <div class="channel-item active" data-type="text">
+                    <span class="hash">#</span>
                     <span class="channel-name">العامة</span>
                 </div>
-                <div class="channel-item">
-                    <span class="hashtag">#</span>
-                    <span class="channel-name">أخبار-البرنامج</span>
-                </div>
-
-                <div class="channel-category">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        style="margin-left: 4px;">
-                        <path d="M12 1v22M5 8v8M2 10v4M19 8v8M22 10v4M15 5v14M9 5v14"></path>
+                <div class="category" style="margin-top: 20px;">القنوات الصوتية</div>
+                <div class="channel-item voice-channel" data-type="voice" data-room-id="waiting-room">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                     </svg>
-                    <span>قنوات صوتية</span>
+                    <span class="channel-name">غرفة الانتظار</span>
                 </div>
-                <div id="voice-channels">
-                    <div class="channel-item voice-channel" data-room-id="waiting-room">
-                        <svg class="audio-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <path d="M12 1v22M5 8v8M2 10v4M19 8v8M22 10v4M15 5v14M9 5v14" />
-                        </svg>
-                        <span class="channel-name">غرفة الانتظار</span>
-                    </div>
-                    <div class="voice-members" id="voice-members-waiting-room"></div>
-
-                    <div class="channel-item voice-channel" data-room-id="lounge">
-                        <svg class="audio-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <path d="M12 1v22M5 8v8M2 10v4M19 8v8M22 10v4M15 5v14M9 5v14" />
-                        </svg>
-                        <span class="channel-name">المجلس (Lounge)</span>
-                    </div>
-                    <div class="voice-members" id="voice-members-lounge"></div>
-                </div>
-                <div class="channel-category">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        style="margin-left: 4px;">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                <div class="channel-item voice-channel" data-type="voice" data-room-id="lounge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                     </svg>
-                    <span>الرسائل الخاصة</span>
+                    <span class="channel-name">المجلس العام</span>
                 </div>
-                <div id="dm-list">
-                    <!-- DM users will appear here -->
-                </div>
+                <div class="category" style="margin-top: 20px;">الرسائل المباشرة</div>
+                <div id="dm-list"></div>
             </div>
 
+            <!-- Voice Controls -->
             <div id="voice-controls" style="display: none;" class="voice-controls">
                 <div class="voice-info">
                     <span class="status">متصل صوتياً</span>
@@ -175,62 +128,30 @@
                 </div>
             </div>
 
+            <!-- Admin Voice Effects -->
             <div id="admin-voice-effects" style="display: none;" class="admin-effects-panel">
                 <span class="label">تأثيرات الصوت (ADMIN):</span>
                 <button class="effect-btn active" data-effect="none">طبيعي</button>
                 <button class="effect-btn" data-effect="robot">روبوت</button>
-                <button class="effect-btn" data-effect="chipmunk">سنجاب</button>
-                <button class="effect-btn" data-effect="deep">عميق</button>
                 <div class="separator-v"></div>
-                <button id="mute-all-btn" class="effect-btn danger-outline" title="كتم الجميع">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        style="vertical-align: middle; margin-left: 4px;">
-                        <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
-                        <line x1="23" y1="9" x2="17" y2="15"></line>
-                        <line x1="17" y1="9" x2="23" y2="15"></line>
-                    </svg>
-                    كتم الكل
-                </button>
+                <button id="mute-all-btn" class="effect-btn danger-outline">كتم الكل</button>
             </div>
 
+            <!-- Music Bot Panel -->
             <footer class="music-bot-panel" id="music-panel" style="display: none;">
                 <div class="music-info">
-                    <span class="music-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <path d="M9 18V5l12-2v13"></path>
-                            <circle cx="6" cy="18" r="3"></circle>
-                            <circle cx="18" cy="16" r="3"></circle>
-                        </svg></span>
                     <marquee id="current-track">لا يوجد ملف موسيقى حالياً...</marquee>
                 </div>
                 <div class="music-controls">
-                    <input type="text" id="music-url" placeholder="رابط الصوت (URL)">
-                    <button id="play-music-btn" class="icon-btn" title="تشغيل">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                        </svg>
-                    </button>
-                    <button id="stop-music-btn" class="icon-btn" title="إيقاف">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <rect x="4" y="4" width="16" height="16"></rect>
-                        </svg>
-                    </button>
-                    <button id="refresh-sound-btn" class="icon-btn" title="تنشيط الصوت">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
-                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                        </svg>
-                    </button>
+                    <input type="text" id="music-url" placeholder="URL">
+                    <button id="play-music-btn" class="icon-btn">▶</button>
+                    <button id="stop-music-btn" class="icon-btn">■</button>
                 </div>
-                <div id="youtube-player-container"
-                    style="position: fixed; bottom: 0; right: 0; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; z-index: -1;">
-                </div>
+                <div id="youtube-player-container"></div>
                 <audio id="global-audio" style="display: none;"></audio>
             </footer>
 
+            <!-- User Profile Footer -->
             <footer class="user-profile">
                 <div class="user-avatar" id="current-user-avatar">
                     <div class="status-indicator online"></div>
@@ -248,300 +169,78 @@
                     </div>
                 </div>
                 <div class="user-actions">
-                    <button class="icon-btn" id="mute-btn" title="كتم الميكروفون">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
+                    <button class="icon-btn" id="mute-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                             <line x1="12" y1="19" x2="12" y2="23"></line>
-                            <line x1="8" y1="23" x2="16" y2="23"></line>
-                        </svg>
-                    </button>
-                    <button class="icon-btn" id="deafen-btn" title="كتم الصوت">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
+                        </svg></button>
+                    <button class="icon-btn" id="deafen-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
                             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                             <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                        </svg>
-                    </button>
-                    <button class="icon-btn" id="settings-trigger" title="الإعدادات">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
+                        </svg></button>
+                    <button class="icon-btn" id="settings-trigger"><svg width="18" height="18" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path
                                 d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
                             </path>
-                        </svg>
-                    </button>
-                    <button class="icon-btn logout-discord-style" id="logout-btn" title="خروج">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                            <polyline points="16 17 21 12 16 7" />
-                            <line x1="21" y1="12" x2="9" y2="12" />
-                        </svg>
-                    </button>
+                        </svg></button>
+                    <button class="icon-btn logout-discord-style" id="logout-btn"><svg width="18" height="18"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                        </svg></button>
                 </div>
             </footer>
         </aside>
 
-
-        <!-- Settings Modal -->
-        <div id="settings-overlay" class="modal-overlay" style="display: none;">
-            <div class="modal-box settings-premium-box">
-                <aside class="settings-sidebar">
-                    <div class="sidebar-item active" data-target="user-settings">حسابي</div>
-                    <div class="sidebar-item" data-target="security-settings">الأمان</div>
-                    <div id="admin-settings-link" class="sidebar-item" data-target="admin-settings"
-                        style="display: none;">إدارة المستخدمين 👑</div>
-                    <div class="sidebar-separator"></div>
-                    <div class="sidebar-item danger" id="logout-settings-btn">تسجيل الخروج</div>
-                </aside>
-                <div class="settings-panel">
-                    <button class="close-settings-premium" id="close-settings">&times;</button>
-
-                    <div id="user-settings" class="settings-content-section">
-                        <h2>حسابي</h2>
-                        <div class="settings-profile-card">
-                            <div class="profile-banner"></div>
-                            <div class="profile-header">
-                                <div class="avatar-wrapper" id="settings-avatar-preview">
-                                    <img src="logo.png" alt="Avatar">
-                                    <div class="status-indicator"></div>
-                                </div>
-                                <div class="profile-meta">
-                                    <h3 id="settings-display-username">Username</h3>
-                                    <span id="settings-display-role">Member</span>
-                                </div>
-                                <button class="primary-btn edit-btn"
-                                    onclick="document.getElementById('avatar-file-input').click()">تغيير الصورة</button>
-                                <input type="file" id="avatar-file-input" style="display: none;" accept="image/*">
-                            </div>
-                            <div class="profile-body">
-                                <div class="xp-status">
-                                    <span id="settings-display-lvl">Lvl 1</span>
-                                    <div class="xp-bar-container">
-                                        <div id="settings-xp-bar" class="xp-bar-fill"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="input-group-premium">
-                            <label>رابط الصورة الشخصية (URL)</label>
-                            <input type="text" id="settings-avatar" placeholder="https://...">
-                        </div>
-                        <div class="input-group-premium">
-                            <label>الحالة المخصصة</label>
-                            <input type="text" id="settings-custom-status" placeholder="ماذا يدور في ذهنك؟">
-                        </div>
-                        <div class="input-group-premium">
-                            <label>تغيير الحالة</label>
-                            <select id="settings-status-select" class="dark-select-premium">
-                                <option value="online">متصل (Online)</option>
-                                <option value="idle">خامل (Idle)</option>
-                                <option value="dnd">الرجاء عدم الإزعاج (DND)</option>
-                            </select>
-                        </div>
-                        <div class="input-group-premium">
-                            <label>اسم المستخدم</label>
-                            <input type="text" id="settings-new-username" placeholder="تغيير الاسم">
-                        </div>
-                        <button id="update-profile-btn-user" class="primary-btn" style="margin-top: 20px;">حفظ
-                            التغييرات</button>
-                    </div>
-
-                    <div id="security-settings" class="settings-content-section" style="display: none;">
-                        <h2>الأمان</h2>
-                        <div class="input-group-premium">
-                            <label>كلمة المرور الحالية</label>
-                            <input type="password" id="settings-old-password" placeholder="********">
-                        </div>
-                        <div class="input-group-premium">
-                            <label>كلمة المرور الجديدة</label>
-                            <input type="password" id="settings-new-password" placeholder="********">
-                        </div>
-                        <button id="update-profile-btn-security" class="primary-btn" style="margin-top: 20px;">تغيير
-                            كلمة المرور</button>
-
-                        <div class="separator-v"></div>
-                        <h3>طلب مساعدة المدير</h3>
-                        <p class="muted-text">إذا نسيت كلمة المرور أو واجهت مشكلة، اطلب من المدير تغييرها لك.</p>
-                        <button id="request-pwd-reset-btn" class="secondary-btn">طلب إعادة تعيين</button>
-                    </div>
-
-                    <div id="admin-settings" class="settings-content-section" style="display: none;">
-                        <h2>إدارة السيرفر</h2>
-                        <div class="admin-tab-nav-premium">
-                            <button class="tab-btn active" data-tab="requests">الطلبات</button>
-                            <button class="tab-btn" data-tab="roles">الرتب</button>
-                            <button class="tab-btn" data-tab="server-reqs">السيرفرات</button>
-                            <button class="tab-btn" data-tab="audit">السجلات</button>
-                        </div>
-
-                        <!-- ... Admin Content Tabs ... -->
-                        <div id="requests-tab" class="admin-tab-panel">
-                            <div class="admin-request-list" id="password-requests"></div>
-                        </div>
-                        <div id="server-reqs-tab" class="admin-tab-panel" style="display: none;">
-                            <div class="admin-request-list" id="server-reqs-list"></div>
-                        </div>
-                        <div id="roles-tab" class="admin-tab-panel" style="display: none;">
-                            <div class="role-creation-premium">
-                                <input type="text" id="new-role-name" placeholder="اسم الرتبة">
-                                <input type="color" id="new-role-color" value="#ffffff">
-                                <button id="create-role-btn" class="secondary-btn">إنشاء</button>
-                            </div>
-                            <div id="roles-list-admin" class="admin-request-list"></div>
-                        </div>
-                        <div id="audit-tab" class="admin-tab-panel" style="display: none;">
-                            <div id="audit-logs-list" class="admin-request-list"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Server Request Modal -->
-        <div id="server-request-overlay" class="modal-overlay" style="display: none;">
-            <div class="modal-box">
-                <header class="modal-header">
-                    <h2>طلب إنشاء سيرفر جديد</h2>
-                    <button class="close-modal" id="close-server-req">&times;</button>
-                </header>
-                <div class="modal-body">
-                    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 15px;">
-                        يمكنك طلب إنشاء مساحة خاصة بك. سيتم مراجعة طلبك من قبل إدارة راست كورد.
-                    </p>
-                    <div class="input-group">
-                        <label>اسم السيرفر</label>
-                        <input type="text" id="new-server-name-input" placeholder="مثلاً: سيرفر الأصدقاء">
-                    </div>
-                    <button id="submit-server-req-btn" class="primary-btn">إرسال الطلب</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content: Chat -->
-        <main class="chat-area">
+        <!-- Main Chat Area -->
+        <main class="chat-main">
             <header class="chat-header">
-                <div class="header-left">
-                    <button class="icon-btn mobile-menu-btn" id="mobile-menu-trigger" style="display: none;">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <line x1="3" y1="12" x2="21" y2="12"></line>
-                            <line x1="3" y1="6" x2="21" y2="6"></line>
-                            <line x1="3" y1="18" x2="21" y2="18"></line>
-                        </svg>
-                    </button>
-                    <span class="hashtag"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <line x1="4" y1="9" x2="20" y2="9"></line>
-                            <line x1="4" y1="15" x2="20" y2="15"></line>
-                            <line x1="10" y1="3" x2="8" y2="21"></line>
-                            <line x1="16" y1="3" x2="14" y2="21"></line>
-                        </svg></span>
+                <div class="channel-info">
+                    <span class="hash">#</span>
                     <h2 id="current-channel-name">العامة</h2>
                 </div>
-                <div class="header-right">
-                    <button class="icon-btn" title="المواضيع"><svg width="20" height="20" viewBox="0 0 24 24"
-                            fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                        </svg></button>
-                    <button class="icon-btn" title="الرسائل المثبتة"><svg width="20" height="20" viewBox="0 0 24 24"
-                            fill="none" stroke="currentColor" stroke-width="2">
-                            <path
-                                d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14">
-                            </path>
-                            <path d="M16.5 9.4L7.5 4.21"></path>
-                            <path d="M21 16V8"></path>
-                            <path d="M7.5 19.79l9-5.19"></path>
-                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                        </svg></button>
-                    <button class="icon-btn" id="members-trigger" title="قائمة الأعضاء"><svg width="20" height="20"
-                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                        </svg></button>
-                    <button class="icon-btn" id="clear-chat-btn" title="مسح المحادثة"
-                        style="display: none; color: #ff4444;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                            </path>
-                            <line x1="10" y1="11" x2="10" y2="17"></line>
-                            <line x1="14" y1="11" x2="14" y2="17"></line>
-                        </svg>
-                    </button>
-                    <div id="admin-badge"
-                        style="display: none; background: var(--accent-rust); padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
-                        ADIMN VIEW</div>
-                </div>
             </header>
-
-            <section class="messages-container" id="messages">
-                <!-- Messages will be injected here -->
-            </section>
-
-            <footer class="input-area">
-                <div id="typing-indicator" class="typing-indicator"></div>
-
-                <div id="reply-preview-container" class="reply-preview-container" style="display: none;">
-                    <div class="reply-preview-content">
-                        <span class="reply-label">الرد على: </span>
-                        <span id="reply-preview-user" class="reply-user"></span>
-                        <p id="reply-preview-text" class="reply-text"></p>
-                    </div>
-                    <button id="cancel-reply" class="cancel-reply-btn">&times;</button>
+            <div class="messages-container" id="messages"></div>
+            <div id="reply-preview-container" class="reply-preview-container" style="display: none;">
+                <div class="reply-content">
+                    <span class="replying-to">الرد على <span id="reply-preview-user"></span></span>
+                    <div id="reply-preview-text" class="reply-text"></div>
                 </div>
-
-                <div class="input-container">
-                    <button class="plus-btn" id="file-trigger">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="3">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                    </button>
+                <button id="cancel-reply">×</button>
+            </div>
+            <footer class="chat-input-area">
+                <div class="input-wrapper">
+                    <button class="attach-btn" id="file-trigger">📎</button>
                     <input type="file" id="file-input" style="display: none;">
-                    <input type="text" placeholder="أرسل رسالة في #العامة" id="message-input">
-                    <div class="input-actions">
-                        <button class="emoji-btn" id="emoji-trigger">😊</button>
-                        <div id="emoji-picker" class="emoji-picker" style="display: none;"></div>
-                        <button class="send-btn" id="send-btn">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-                            </svg>
-                        </button>
-                    </div>
+                    <input type="text" id="message-input" placeholder="أرسل رسالة...">
+                    <button class="emoji-btn" id="emoji-trigger">😊</button>
                 </div>
-                <div class="copyright">
-                    جميع الحقوق محفوظة لصالح <strong>راست كورد</strong> &copy; 2024
-                </div>
+                <div id="typing-indicator" class="typing-indicator"></div>
             </footer>
+            <div id="emoji-picker" class="emoji-picker" style="display: none;">
+                <span onclick="addEmoji('😊')">😊</span><span onclick="addEmoji('😂')">😂</span><span
+                    onclick="addEmoji('❤️')">❤️</span><span onclick="addEmoji('👍')">👍</span>
+            </div>
         </main>
 
-        <!-- Right Sidebar: Members -->
+        <!-- Right Members Sidebar -->
         <aside class="members-sidebar">
-            <header class="sidebar-header mobile-only"
-                style="display: none; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--border-glass);">
-                <span style="font-weight: bold;">الأعضاء</span>
-                <button id="close-members"
-                    style="background: none; border: none; color: white; font-size: 24px; cursor: pointer;">&times;</button>
+            <header class="members-header">
+                <button id="clear-chat-btn" class="btn-clear-chat" style="display: none;">مسح الشات</button>
             </header>
-            <div class="member-category" style="margin-top: 10px;">الأعضاء المتصلون</div>
-            <div id="members-list">
-                <!-- Members will be injected here -->
-            </div>
+            <div class="member-category">الأعضاء المتصلون</div>
+            <div id="members-list"></div>
         </aside>
     </div>
+
+    <!-- Extra Containers -->
     <div id="screens-container" class="screens-container"></div>
     <div id="voice-video-grid" class="voice-video-grid"></div>
-    <script src="script.js"></script>
+
     <!-- User Profile Modal -->
     <div id="user-profile-modal" class="modal-overlay" style="display: none;">
         <div class="modal-box profile-card-box">
@@ -563,44 +262,106 @@
                         <h4>المستوى</h4>
                         <p id="profile-card-lvl">المستوى 1</p>
                     </div>
-                    <button id="profile-card-dm-btn" class="primary-btn" style="margin-top: 20px;">إرسال رسالة</button>
+                    <button id="profile-card-dm-btn" class="primary-btn">إرسال رسالة</button>
                     <button onclick="document.getElementById('user-profile-modal').style.display='none'"
-                        class="secondary-btn" style="margin-top: 8px; width: 100%;">إغلاق</button>
+                        class="secondary-btn">إغلاق</button>
                 </div>
             </div>
         </div>
     </div>
-    <!-- Floating Voice Bar (Discord Mobile Style) -->
+
+    <!-- Floating Voice Bar -->
     <div id="floating-voice-bar" class="floating-voice-bar" style="display: none;">
         <div class="voice-bar-info">
             <div class="pulse-icon"></div>
             <span id="floating-room-name">غرفة الصوت</span>
         </div>
         <div class="voice-bar-actions">
-            <button id="float-mute-btn" class="float-btn" title="كتم الميكروفون">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button id="float-mute-btn" class="float-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2">
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg>
-            </button>
-            <button id="float-deafen-btn" class="float-btn" title="كتم الصوت">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                </svg></button>
+            <button id="float-deafen-btn" class="float-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2">
                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                </svg>
-            </button>
-            <button id="float-leave-btn" class="float-btn exit" title="إنهاء الاتصال">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path
-                        d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91">
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                </svg></button>
+            <button id="float-leave-btn" class="float-btn exit"><svg width="20" height="20" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7">
                     </path>
                     <line x1="23" y1="1" x2="1" y2="23"></line>
-                </svg>
-            </button>
+                </svg></button>
         </div>
     </div>
+
+    <!-- Settings Overlay -->
+    <div id="settings-overlay" class="settings-overlay" style="display: none;">
+        <div class="settings-container-premium">
+            <aside class="settings-sidebar">
+                <div class="sidebar-section">
+                    <h3 class="sidebar-header-text">إعدادات المستخدم</h3>
+                    <div class="sidebar-item active" data-target="my-account-section">حسابي</div>
+                    <div class="sidebar-item" data-target="user-profile-section">الملف الشخصي</div>
+                </div>
+                <div class="sidebar-section">
+                    <h3 class="sidebar-header-text">إعدادات التطبيق</h3>
+                    <div class="sidebar-item" data-target="security-section">الخصوصية والأمان</div>
+                </div>
+                <div id="admin-management-settings" class="sidebar-section" style="display: none;">
+                    <h3 class="sidebar-header-text">إدارة السيرفر (مدير)</h3>
+                    <div class="sidebar-item" data-target="admin-management-section">الإدارة العامة</div>
+                </div>
+                <div class="sidebar-item logout-red" id="logout-settings-btn">تسجيل الخروج</div>
+            </aside>
+            <main class="settings-panel">
+                <div class="settings-content-scroll">
+                    <section id="my-account-section" class="settings-content-section active">
+                        <h2 class="section-title">حسابي</h2>
+                        <div class="settings-input-grid">
+                            <div class="settings-input-group">
+                                <label>صورة الشخصية (URL)</label>
+                                <input type="text" id="settings-avatar">
+                            </div>
+                            <div class="settings-input-group">
+                                <label>الحالة المخصصة</label>
+                                <input type="text" id="settings-custom-status">
+                            </div>
+                            <div class="settings-input-group">
+                                <label>الحالة</label>
+                                <select id="settings-status">
+                                    <option value="online">متصل</option>
+                                    <option value="idle">خمول</option>
+                                    <option value="dnd">عدم الإزعاج</option>
+                                </select>
+                            </div>
+                            <div class="settings-input-group full-width">
+                                <label>اسم المستخدم</label>
+                                <input type="text" id="settings-username">
+                            </div>
+                            <button id="update-profile-btn-user" class="premium-save-btn">حفظ</button>
+                        </div>
+                    </section>
+                    <section id="security-section" class="settings-content-section">
+                        <h2 class="section-title">الأمان</h2>
+                        <div class="settings-input-group full-width">
+                            <label>كلمة المرور الجديدة</label>
+                            <input type="password" id="new-password">
+                        </div>
+                        <button id="update-profile-btn-security" class="premium-save-btn">تحديث</button>
+                    </section>
+                    <section id="admin-management-section" class="settings-content-section">
+                        <h2 class="section-title">الإدارة</h2>
+                        <div id="admin-roles-list"></div>
+                    </section>
+                </div>
+            </main>
+            <button class="settings-close-btn" id="settings-close-btn">ESC</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
 </body>
 
 </html>
