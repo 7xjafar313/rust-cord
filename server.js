@@ -25,7 +25,16 @@ const DB_FILE_PATH = path.join(__dirname, 'db_backup.json');
 let localDb = {
     users: [],
     messages: [],
-    passwordRequests: []
+    passwordRequests: [],
+    bans: [],
+    directMessages: [],
+    roles: [
+        { name: 'Admin', color: '#de4b39', permissions: ['all'] },
+        { name: 'Member', color: '#b9bbbe', permissions: [] }
+    ],
+    auditLogs: [],
+    servers: [],
+    serverRequests: []
 };
 
 // Track voice channel members
@@ -41,10 +50,27 @@ async function loadDbFromTelegram() {
         console.log('🔄 محاولة تحميل قاعدة البيانات من تيليجرام...');
         // تحقق أولاً من وجود ملف محلي
         if (fs.existsSync(DB_FILE_PATH)) {
-            const fileData = JSON.parse(fs.readFileSync(DB_FILE_PATH));
-            if (fileData && Array.isArray(fileData.users)) {
-                localDb = fileData;
-                console.log('✅ تم تحميل قاعدة البيانات من الملف المحلي.');
+            try {
+                const fileData = JSON.parse(fs.readFileSync(DB_FILE_PATH));
+                if (fileData && Array.isArray(fileData.users)) {
+                    localDb = {
+                        users: fileData.users || [],
+                        messages: fileData.messages || [],
+                        passwordRequests: fileData.passwordRequests || [],
+                        bans: fileData.bans || [],
+                        directMessages: fileData.directMessages || [],
+                        roles: fileData.roles || [
+                            { name: 'Admin', color: '#de4b39', permissions: ['all'] },
+                            { name: 'Member', color: '#b9bbbe', permissions: [] }
+                        ],
+                        auditLogs: fileData.auditLogs || [],
+                        servers: fileData.servers || [],
+                        serverRequests: fileData.serverRequests || []
+                    };
+                    console.log('✅ تم تحميل قاعدة البيانات من الملف المحلي.');
+                }
+            } catch (err) {
+                console.error('⚠️ خطأ في قراءة ملف القاعدة المحلي، سيتم البدء من جديد:', err.message);
             }
         }
 
@@ -71,9 +97,20 @@ async function loadDbFromTelegram() {
             const downloadedData = typeof fileContent.data === 'string' ? JSON.parse(fileContent.data) : fileContent.data;
 
             if (downloadedData && Array.isArray(downloadedData.users)) {
-                // ندمج البيانات المحلية مع بيانات تيليجرام أو نستبدلها؟ 
-                // سنعتبر تيليجرام هو الأحدث إذا كان هناك فرق
-                localDb = downloadedData;
+                localDb = {
+                    users: downloadedData.users || [],
+                    messages: downloadedData.messages || [],
+                    passwordRequests: downloadedData.passwordRequests || [],
+                    bans: downloadedData.bans || [],
+                    directMessages: downloadedData.directMessages || [],
+                    roles: downloadedData.roles || [
+                        { name: 'Admin', color: '#de4b39', permissions: ['all'] },
+                        { name: 'Member', color: '#b9bbbe', permissions: [] }
+                    ],
+                    auditLogs: downloadedData.auditLogs || [],
+                    servers: downloadedData.servers || [],
+                    serverRequests: downloadedData.serverRequests || []
+                };
                 fs.writeFileSync(DB_FILE_PATH, JSON.stringify(localDb, null, 2));
                 console.log('✅ تم تحديث القاعدة من تيليجرام بنجاح.');
             }
@@ -81,6 +118,8 @@ async function loadDbFromTelegram() {
     } catch (error) {
         console.error('⚠️ تحذير في مزامنة تيليجرام:', error.message);
         console.log('ℹ️ سيتم الاستمرار باستخدام القاعدة المحلية.');
+        // Ensure auditLogs exists if file loading partially failed or it's a new file
+        if (!localDb.auditLogs) localDb.auditLogs = [];
     }
 }
 
@@ -102,6 +141,18 @@ async function saveAndSyncDb() {
     } catch (error) {
         console.error('❌ خطأ في مزامنة تيليجرام:', error.message);
     }
+}
+
+function logAudit(userId, username, action, details) {
+    localDb.auditLogs.push({
+        userId,
+        username,
+        action,
+        details,
+        timestamp: new Date()
+    });
+    // Keep only last 200 logs
+    if (localDb.auditLogs.length > 200) localDb.auditLogs.shift();
 }
 
 app.use(express.json());
@@ -128,6 +179,12 @@ app.post('/api/register', async (req, res) => {
             password: hashedPassword,
             role,
             isVerified: false,
+            avatar: '',
+            status: 'online',
+            customStatus: '',
+            xp: 0,
+            level: 1,
+            lastXpGain: 0,
             createdAt: new Date()
         };
 
@@ -146,12 +203,25 @@ app.post('/api/login', async (req, res) => {
         const { username, password } = req.body;
         const user = localDb.users.find(u => u.username === username);
 
+        if (user && localDb.bans.find(b => b.userId === user._id)) {
+            return res.status(403).json({ error: 'لقد تم حظرك من هذا السيرفر' });
+        }
+
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ error: 'بيانات الاعتماد غير صحيحة' });
         }
 
         const token = jwt.sign({ id: user._id, role: user.role, username: user.username }, JWT_SECRET);
-        res.json({ token, user: { username: user.username, role: user.role, isVerified: user.isVerified } });
+        res.json({
+            token, user: {
+                username: user.username,
+                role: user.role,
+                isVerified: user.isVerified,
+                avatar: user.avatar,
+                level: user.level,
+                xp: user.xp
+            }
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -161,7 +231,7 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/update-profile', async (req, res) => {
     try {
-        const { token, newUsername, oldPassword, newPassword } = req.body;
+        const { token, newUsername, oldPassword, newPassword, newAvatar, newStatus, newCustomStatus } = req.body;
         const decoded = jwt.verify(token, JWT_SECRET);
         const user = localDb.users.find(u => u._id === decoded.id);
 
@@ -181,8 +251,15 @@ app.post('/api/update-profile', async (req, res) => {
             user.username = newUsername;
         }
 
+        if (newAvatar !== undefined) {
+            user.avatar = newAvatar;
+        }
+
+        if (newStatus) user.status = newStatus;
+        if (newCustomStatus !== undefined) user.customStatus = newCustomStatus;
+
         await saveAndSyncDb();
-        res.json({ success: true, user: { username: user.username, role: user.role } });
+        res.json({ success: true, user: { username: user.username, role: user.role, avatar: user.avatar, status: user.status, customStatus: user.customStatus } });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -258,6 +335,7 @@ app.post('/api/admin/verify-user', async (req, res) => {
         const user = localDb.users.find(u => u._id === targetUserId);
         if (user) {
             user.isVerified = verify;
+            logAudit(decoded.id, decoded.username, verify ? 'توثيق حساب' : 'إلغاء توثيق', `المستهدف: ${user.username}`);
             await saveAndSyncDb();
             res.json({ success: true });
         } else {
@@ -266,6 +344,87 @@ app.post('/api/admin/verify-user', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// Admin endpoint to ban user
+app.post('/api/admin/ban-user', async (req, res) => {
+    try {
+        const { token, targetUserId, reason } = req.body;
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin' && decoded.role !== 'assistant') return res.status(403).json({ error: 'غير مصرح لك' });
+
+        const user = localDb.users.find(u => u._id === targetUserId);
+        if (user) {
+            if (!localDb.bans.find(b => b.userId === targetUserId)) {
+                localDb.bans.push({ userId: targetUserId, username: user.username, reason: reason || 'لا يوجد سبب' });
+                logAudit(decoded.id, decoded.username, 'حظر مستخدم', `المستهدف: ${user.username} | السبب: ${reason}`);
+                await saveAndSyncDb();
+            }
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'المستخدم غير موجود' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Role Management Endpoints
+app.post('/api/admin/create-role', async (req, res) => {
+    try {
+        const { token, name, color } = req.body;
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') return res.status(403).json({ error: 'للمدير العام فقط' });
+
+        localDb.roles.push({ name, color, permissions: [] });
+        await saveAndSyncDb();
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/delete-role', async (req, res) => {
+    try {
+        const { token, name } = req.body;
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin') return res.status(403).json({ error: 'للمدير العام فقط' });
+
+        localDb.roles = localDb.roles.filter(r => r.name !== name);
+        // Also remove the role from users who have it
+        localDb.users.forEach(u => {
+            if (u.customRole === name) u.customRole = null;
+        });
+
+        await saveAndSyncDb();
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/assign-role', async (req, res) => {
+    try {
+        const { token, targetUserId, roleName } = req.body;
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin' && decoded.role !== 'assistant') return res.status(403).json({ error: 'غير مصرح لك' });
+
+        const user = localDb.users.find(u => u._id === targetUserId);
+        if (user) {
+            user.customRole = roleName;
+            await saveAndSyncDb();
+            res.json({ success: true });
+        } else res.status(404).json({ error: 'المستخدم غير موجود' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/admin/get-all-roles', (req, res) => {
+    res.json({ roles: localDb.roles });
+});
+
+app.post('/api/admin/get-audit-logs', (req, res) => {
+    try {
+        const { token } = req.body;
+        const decoded = jwt.verify(token, JWT_SECRET);
+        if (decoded.role !== 'admin' && decoded.role !== 'assistant') return res.status(403).json({ error: 'غير مصرح' });
+        res.json({ logs: localDb.auditLogs.slice().reverse() });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('*', (req, res) => {
@@ -286,18 +445,61 @@ io.use((socket, next) => {
 });
 
 io.on('connection', async (socket) => {
-    // إرسال آخر 50 رسالة من الذاكرة
-    const recentMessages = localDb.messages.slice(-50);
+    // إرسال آخر 50 رسالة من السيرفر الحالي (الافتراضي: العالمي)
+    const recentMessages = localDb.messages.filter(m => !m.serverId || m.serverId === 'global-server').slice(-50);
     socket.emit('previous_messages', recentMessages);
+
+    socket.on('get_previous_messages', (data) => {
+        const serverId = data ? data.serverId : 'global-server';
+        const msgs = localDb.messages.filter(m => m.serverId === serverId).slice(-100);
+        socket.emit('previous_messages', msgs);
+    });
 
     socket.on('send_message', (data) => {
         const user = localDb.users.find(u => u.username === socket.user.username);
+        let customRoleColor = '';
+        let customRoleName = '';
+
+        if (user && user.customRole) {
+            const role = localDb.roles.find(r => r.name === user.customRole);
+            if (role) {
+                customRoleColor = role.color;
+                customRoleName = role.name;
+            }
+        }
+
+        // --- LEVEL SYSTEM ---
+        const now = Date.now();
+        let levelUp = false;
+        if (user) {
+            if ((now - (user.lastXpGain || 0)) > 30000) { // 30s cooldown
+                user.xp = (user.xp || 0) + Math.floor(Math.random() * 10) + 15;
+                user.lastXpGain = now;
+                const nextLevelXp = (user.level || 1) * 100;
+                if (user.xp >= nextLevelXp) {
+                    user.level = (user.level || 1) + 1;
+                    user.xp -= nextLevelXp;
+                    levelUp = true;
+                }
+            }
+        }
+
         const msg = {
             _id: Date.now().toString(),
             author: socket.user.username,
             role: socket.user.role,
+            customRoleName,
+            customRoleColor,
             isVerified: user ? user.isVerified : false,
+            avatar: user ? user.avatar : '',
+            level: user ? user.level : 1,
             text: data.text,
+            file: data.file,
+            fileName: data.fileName,
+            fileType: data.fileType,
+            replyTo: data.replyTo || null, // { id, author, text }
+            reactions: {}, // { emoji: [usernames] }
+            serverId: data.serverId || 'global-server',
             timestamp: new Date()
         };
         localDb.messages.push(msg);
@@ -306,6 +508,9 @@ io.on('connection', async (socket) => {
         if (localDb.messages.length > 1000) localDb.messages.shift();
 
         io.emit('new_message', msg);
+        if (levelUp) {
+            io.emit('level_up', { username: user.username, level: user.level });
+        }
         saveAndSyncDb(); // حفظ الرسائل أيضاً
     });
 
@@ -313,6 +518,27 @@ io.on('connection', async (socket) => {
         if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
             localDb.messages = localDb.messages.filter(m => m._id !== messageId);
             io.emit('message_deleted', messageId);
+            saveAndSyncDb();
+        }
+    });
+
+    socket.on('add_reaction', (data) => {
+        const { messageId, emoji } = data;
+        const msg = localDb.messages.find(m => m._id === messageId);
+        if (msg) {
+            if (!msg.reactions) msg.reactions = {};
+            if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+
+            const username = socket.user.username;
+            if (!msg.reactions[emoji].includes(username)) {
+                msg.reactions[emoji].push(username);
+            } else {
+                // Remove if already reacted
+                msg.reactions[emoji] = msg.reactions[emoji].filter(u => u !== username);
+                if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+            }
+
+            io.emit('update_reactions', { messageId, reactions: msg.reactions });
             saveAndSyncDb();
         }
     });
@@ -333,11 +559,41 @@ io.on('connection', async (socket) => {
             username: socket.user.username,
             role: socket.user.role,
             isVerified: user ? user.isVerified : false,
+            avatar: user ? user.avatar : '',
+            status: user ? user.status : 'online',
+            customStatus: user ? user.customStatus : '',
             isMuted: false,
             isDeafened: false
         });
 
         io.emit('voice_state_update', voiceRooms);
+    });
+
+    socket.on('update_status', (data) => {
+        const user = localDb.users.find(u => u._id === socket.user.id);
+        if (user) {
+            user.status = data.status || user.status;
+            user.customStatus = data.customStatus !== undefined ? data.customStatus : user.customStatus;
+
+            // Sync status with voice rooms if user is in one
+            Object.keys(voiceRooms).forEach(roomId => {
+                const member = voiceRooms[roomId].find(u => u.userId === socket.user.id);
+                if (member) {
+                    member.status = user.status;
+                    member.customStatus = user.customStatus;
+                }
+            });
+
+            io.emit('voice_state_update', voiceRooms);
+            saveAndSyncDb();
+        }
+    });
+
+    socket.on('screen_signal', (data) => {
+        io.to(data.to).emit('screen_signal', {
+            signal: data.signal,
+            from: socket.id
+        });
     });
 
     socket.on('leave_voice', () => {
@@ -352,6 +608,56 @@ io.on('connection', async (socket) => {
             voiceRooms[id] = voiceRooms[id].filter(u => u.userId !== socket.user.id);
         });
         io.emit('voice_state_update', voiceRooms);
+    });
+
+    // --- DIRECT MESSAGES ---
+    socket.on('send_dm', (data) => {
+        const { to, text, file, fileName, fileType } = data;
+        const msg = {
+            from: socket.user.username,
+            to,
+            text,
+            file,
+            fileName,
+            fileType,
+            timestamp: new Date()
+        };
+        localDb.directMessages.push(msg);
+
+        // Find recipient socket
+        const recipientSocket = Array.from(io.sockets.sockets.values()).find(s => s.user && s.user.username === to);
+        if (recipientSocket) {
+            recipientSocket.emit('new_dm', msg);
+        }
+        socket.emit('new_dm', msg); // Send back to sender
+        saveAndSyncDb();
+    });
+
+    socket.on('get_dms_with', (targetUsername) => {
+        const dms = localDb.directMessages.filter(m =>
+            (m.from === socket.user.username && m.to === targetUsername) ||
+            (m.from === targetUsername && m.to === socket.user.username)
+        );
+        socket.emit('previous_dms', dms);
+    });
+
+    socket.on('typing', (data) => {
+        socket.broadcast.emit('user_typing', { username: socket.user.username, isTyping: data.isTyping });
+    });
+
+    // --- MUSIC BOT ---
+    socket.on('play_music_req', (data) => {
+        if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
+            io.emit('play_music', { url: data.url });
+            logAudit(socket.user.id, socket.user.username, 'تشغيل موسيقى', `الرابط: ${data.url}`);
+        }
+    });
+
+    socket.on('stop_music_req', () => {
+        if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
+            io.emit('stop_music');
+            logAudit(socket.user.id, socket.user.username, 'إيقاف الموسيقى', 'تم إيقاف البث الصوتي');
+        }
     });
 
     socket.on('move_user_voice', (data) => {
@@ -369,7 +675,13 @@ io.on('connection', async (socket) => {
 
     socket.on('force_mute_user_voice', (data) => {
         if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
-            io.to(data.targetSocketId).emit('force_mute_voice');
+            io.to(data.targetSocketId).emit('force_mute_voice', { action: 'mute' });
+        }
+    });
+
+    socket.on('force_unmute_user_voice', (data) => {
+        if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
+            io.to(data.targetSocketId).emit('force_mute_voice', { action: 'unmute' });
         }
     });
 
@@ -381,7 +693,72 @@ io.on('connection', async (socket) => {
         }
     });
 
-    // --- WEBRTC SIGNALING ---
+    // --- SERVER MANAGEMENT ---
+    socket.on('request_server', (data) => {
+        const { serverName } = data;
+        const request = {
+            _id: Date.now().toString(),
+            userId: socket.user.id,
+            username: socket.user.username,
+            serverName,
+            status: 'pending',
+            timestamp: new Date()
+        };
+        localDb.serverRequests.push(request);
+        saveAndSyncDb();
+
+        // Notify admins/assistants
+        io.emit('new_server_request', request);
+        logAudit(socket.user.id, socket.user.username, 'طلب إنشاء سيرفر', `اسم السيرفر: ${serverName}`);
+    });
+
+    socket.on('get_server_requests', () => {
+        if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
+            socket.emit('server_requests_list', localDb.serverRequests);
+        }
+    });
+
+    socket.on('resolve_server_request', (data) => {
+        if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
+            const { requestId, action } = data;
+            const request = localDb.serverRequests.find(r => r._id === requestId);
+
+            if (request) {
+                request.status = action === 'approve' ? 'approved' : 'rejected';
+
+                if (action === 'approve') {
+                    const newServer = {
+                        _id: Date.now().toString(),
+                        name: request.serverName,
+                        ownerId: request.userId,
+                        members: [request.userId],
+                        channels: [
+                            { id: 'general', name: 'العامة', type: 'text' },
+                            { id: 'voice', name: 'غرفة صوتية', type: 'voice' }
+                        ],
+                        icon: 'logo.png',
+                        createdAt: new Date()
+                    };
+                    localDb.servers.push(newServer);
+                    io.emit('server_approved', { userId: request.userId, server: newServer });
+                } else {
+                    io.emit('server_rejected', { userId: request.userId, serverName: request.serverName });
+                }
+
+                saveAndSyncDb();
+                logAudit(socket.user.id, socket.user.username, action === 'approve' ? 'قبول سيرفر' : 'رفض سيرفر', `السيرفر: ${request.serverName} للمستخدم: ${request.username}`);
+            }
+        }
+    });
+
+    socket.on('get_my_servers', () => {
+        const myServers = localDb.servers.filter(s =>
+            s.ownerId === 'system' ||
+            s.ownerId === socket.user.id ||
+            s.members.includes(socket.user.id)
+        );
+        socket.emit('my_servers_list', myServers);
+    });
     socket.on('voice_signal', (data) => {
         // Relay signal from sender to specific recipient
         io.to(data.to).emit('voice_signal', {
@@ -419,6 +796,24 @@ loadDbFromTelegram().then(async () => {
         });
         await saveAndSyncDb();
         console.log('✅ تم إنشاء حساب المدير بنجاح.');
+    }
+
+    // تهيئة السيرفر العام إذا كان غير موجود
+    if (!localDb.servers || localDb.servers.length === 0) {
+        console.log('🌐 إنشاء السيرفر العام الافتراضي...');
+        localDb.servers = [{
+            _id: 'global-server',
+            name: 'راست كورد (العالمي)',
+            ownerId: 'system',
+            members: [], // فارغ يعني متاح للجميع
+            channels: [
+                { id: 'general', name: 'العامة', type: 'text' },
+                { id: 'news', name: 'أخبار-البرنامج', type: 'text' }
+            ],
+            icon: 'logo.png',
+            createdAt: new Date()
+        }];
+        await saveAndSyncDb();
     }
 
     server.listen(PORT, '0.0.0.0', async () => {

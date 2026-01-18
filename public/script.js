@@ -24,8 +24,9 @@ let processedStream = null;
 let userAudios = {}; // socketId -> Audio Element
 let screenStream = null;
 let screenConnections = {}; // socketId -> RTCPeerConnection (Screenshare)
-let activeContext = { type: 'channel', id: 'العامة' }; // { type: 'channel'|'dm', id: string }
+let activeContext = { type: 'channel', id: 'العامة', serverId: 'global-server' }; // { type: 'channel'|'dm', id: string, serverId: string }
 let currentTypingUsers = new Set();
+let replyingTo = null; // { id, author, text }
 
 // Mock database for simulation mode
 let mockMessages = JSON.parse(localStorage.getItem('rc_mock_messages')) || [
@@ -123,6 +124,34 @@ document.addEventListener('DOMContentLoaded', () => {
         location.reload();
     });
 
+    // --- SERVER REQUESTS UI ---
+    const addServerBtn = document.querySelector('.add-server');
+    const serverRequestOverlay = document.getElementById('server-request-overlay');
+    const closeServerReq = document.getElementById('close-server-req');
+    const submitServerReqBtn = document.getElementById('submit-server-req-btn');
+
+    addServerBtn.onclick = () => {
+        serverRequestOverlay.style.display = 'flex';
+    };
+
+    closeServerReq.onclick = () => {
+        serverRequestOverlay.style.display = 'none';
+    };
+
+    submitServerReqBtn.onclick = () => {
+        const serverName = document.getElementById('new-server-name-input').value;
+        if (!serverName) return alert('يرجى إدخال اسم السيرفر');
+        socket.emit('request_server', { serverName });
+        serverRequestOverlay.style.display = 'none';
+        document.getElementById('new-server-name-input').value = '';
+        alert('تم إرسال طلبك للإدارة للموافقة.');
+    };
+
+    async function loadServerRequests() {
+        if (!socket) return;
+        socket.emit('get_server_requests');
+    }
+
     // --- SETTINGS LOGIC ---
     const settingsTrigger = document.getElementById('settings-trigger');
     const settingsOverlay = document.getElementById('settings-overlay');
@@ -146,6 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.add('active');
             document.getElementById(`${btn.dataset.tab}-tab`).style.display = 'block';
             if (btn.dataset.tab === 'audit') loadAuditLogs();
+            if (btn.dataset.tab === 'server-reqs') loadServerRequests();
         });
     });
 
@@ -421,8 +451,54 @@ function startApp(token, user) {
         if (input.value.trim() !== '') {
             sendMessage(input.value);
             input.value = '';
+            cancelReply();
         }
     });
+
+    // Emoji Picker Logic
+    const emojiTrigger = document.getElementById('emoji-trigger');
+    const emojiPicker = document.getElementById('emoji-picker');
+    const msgInput = document.getElementById('message-input');
+
+    const commonEmojis = ['😊', '😂', '🤣', '❤️', '😍', '😒', '😭', '😘', '😑', '😁', '😉', '💀', '🔥', '✨', '👍', '🙏', '💯', '👋', '🎉', '😎', '🙄', '🤔', '😳', '😡', '🤬', '🥵', '🥶', '😱', '🤫', '🥱', '😴', '🤤', '🤮', '🤑', '🤠', '🤡', '🌞', '🌙', '⭐', '🎈', '🎁', '🌹', '💎', '🎮', '🎧', '📱', '💻', '💡', '💰', '⚔️', '🛡️', '👑'];
+
+    commonEmojis.forEach(emoji => {
+        const span = document.createElement('span');
+        span.className = 'emoji-item';
+        span.innerText = emoji;
+        span.onclick = () => {
+            msgInput.value += emoji;
+            emojiPicker.style.display = 'none';
+            msgInput.focus();
+        };
+        emojiPicker.appendChild(span);
+    });
+
+    emojiTrigger.onclick = (e) => {
+        e.stopPropagation();
+        emojiPicker.style.display = emojiPicker.style.display === 'none' ? 'grid' : 'none';
+    };
+
+    document.addEventListener('click', (e) => {
+        if (!emojiPicker.contains(e.target) && e.target !== emojiTrigger) {
+            emojiPicker.style.display = 'none';
+        }
+    });
+
+    document.getElementById('cancel-reply').onclick = cancelReply;
+}
+
+function cancelReply() {
+    replyingTo = null;
+    document.getElementById('reply-preview-container').style.display = 'none';
+}
+
+function setReply(id, author, text) {
+    replyingTo = { id, author, text };
+    document.getElementById('reply-preview-container').style.display = 'flex';
+    document.getElementById('reply-preview-user').innerText = author;
+    document.getElementById('reply-preview-text').innerText = text;
+    document.getElementById('message-input').focus();
 }
 
 function updateUIForUser() {
@@ -479,10 +555,37 @@ function initSocket(token) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     });
 
+    socket.on('update_reactions', (data) => {
+        const { messageId, reactions } = data;
+        const msgEl = document.querySelector(`[data-id="${messageId}"]`);
+        if (msgEl) {
+            const container = msgEl.querySelector('.reactions-container');
+            if (container) {
+                container.innerHTML = '';
+                Object.entries(reactions).forEach(([emoji, users]) => {
+                    const badge = document.createElement('div');
+                    badge.className = `reaction-badge ${users.includes(currentUser.username) ? 'active' : ''}`;
+                    badge.innerHTML = `<span>${emoji}</span><span class="reaction-count">${users.length}</span>`;
+                    badge.onclick = () => socket.emit('add_reaction', { messageId, emoji });
+                    container.appendChild(badge);
+                });
+            }
+        }
+    });
+
     socket.on('message_deleted', (id) => {
         const el = document.querySelector(`[data-id="${id}"]`);
         if (el) el.remove();
     });
+
+    socket.on('server_approved', (data) => {
+        if (data.userId === currentUser._id || data.userId === currentUser.id) {
+            alert(`✅ مبروك! تم قبول طلبك لإنشاء سيرفر: ${data.server.name}`);
+            socket.emit('get_my_servers');
+        }
+    });
+
+    socket.emit('get_my_servers');
 
     socket.on('previous_dms', (messages) => {
         if (activeContext.type === 'dm') {
@@ -534,6 +637,49 @@ function initSocket(token) {
         document.getElementById('music-panel').style.display = 'none';
     });
 
+    socket.on('server_requests_list', (requests) => {
+        const container = document.getElementById('server-reqs-list');
+        if (!container) return;
+        container.innerHTML = '';
+        const pending = requests.filter(r => r.status === 'pending');
+        if (pending.length === 0) {
+            container.innerHTML = '<p class="empty-msg">لا توجد طلبات معلقة حالياً.</p>';
+            return;
+        }
+        pending.forEach(req => {
+            const div = document.createElement('div');
+            div.className = 'request-item';
+            div.innerHTML = `
+                <div>
+                    <strong>${req.serverName}</strong>
+                    <div style="font-size: 11px; color: var(--text-muted)">بواسطة: ${req.username}</div>
+                </div>
+                <div class="request-actions">
+                    <button class="btn-small btn-approve" onclick="resolveServerRequest('${req._id}', 'approve')">✅ قبول</button>
+                    <button class="btn-small btn-reject" onclick="resolveServerRequest('${req._id}', 'reject')">❌ رفض</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    });
+
+    socket.on('my_servers_list', (servers) => {
+        renderServers(servers);
+    });
+
+    socket.on('server_approved', (data) => {
+        if (data.userId === currentUser.id) {
+            alert(`✅ تم قبول طلبك لإنشاء سيرفر "${data.server.name}"!`);
+            socket.emit('get_my_servers');
+        }
+    });
+
+    socket.on('server_rejected', (data) => {
+        if (data.userId === currentUser.id) {
+            alert(`❌ للأسف، تم رفض طلبك لإنشاء سيرفر "${data.serverName}".`);
+        }
+    });
+
     function updateDMList(msg) {
         const otherUser = msg.from === currentUser.username ? msg.to : msg.from;
         let dmItem = document.getElementById(`dm-${otherUser}`);
@@ -545,7 +691,7 @@ function initSocket(token) {
                 <div class="dm-user-avatar"><img src="logo.png" style="width:100%"></div>
                 <div class="dm-user-info">
                     <span class="dm-username">${otherUser}</span>
-                    <span class="dm-status">رسالة جديدة</span>
+                    <span class="dm-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:4px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>رسالة جديدة</span>
                 </div>
             `;
             dmItem.onclick = () => {
@@ -559,10 +705,10 @@ function initSocket(token) {
     function renderTypingIndicator() {
         const indicator = document.getElementById('typing-indicator');
         if (currentTypingUsers.size === 0) {
-            indicator.innerText = '';
+            indicator.innerHTML = '';
         } else {
             const users = Array.from(currentTypingUsers).join(', ');
-            indicator.innerText = `${users} يكتب الآن...`;
+            indicator.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:6px; animation: bounce 1s infinite;"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>${users} يكتب الآن...`;
         }
     }
 
@@ -765,13 +911,16 @@ function initSocket(token) {
             videoWrap.className = 'screen-share-overlay';
             videoWrap.innerHTML = `
                 <div class="screen-header">
-                    <span>مشاركة شاشة</span>
+                    <span>مشاركة شاشة - ${socketId === 'local' ? 'معاينة' : 'بث مباشر'}</span>
                     <button class="close-screen">&times;</button>
                 </div>
-                <video autoplay playsinline></video>
+                <video autoplay playsinline muted></video>
             `;
             document.body.appendChild(videoWrap);
-            videoWrap.querySelector('.close-screen').onclick = () => videoWrap.remove();
+            videoWrap.querySelector('.close-screen').onclick = () => {
+                videoWrap.remove();
+                if (socketId === 'local') stopScreenShare();
+            };
         }
         videoWrap.querySelector('video').srcObject = stream;
     }
@@ -837,9 +986,15 @@ function initSocket(token) {
                     if ((currentUser.role === 'admin' || currentUser.role === 'assistant') && user.socketId !== socket.id) {
                         adminActions = `
                             <div class="admin-actions-group">
-                                <span class="admin-action-btn" onclick="requestMoveUser('${user.socketId}', '${roomId}')" title="نقل">✈️</span>
-                                <span class="admin-action-btn" onclick="toggleForceMute('${user.socketId}', ${user.isMuted})" title="${user.isMuted ? 'إلغاء الكتم' : 'كتم إجباري'}">${user.isMuted ? '🔊' : '🔇'}</span>
-                                <span class="admin-action-btn kick" onclick="requestKickUser('${user.socketId}')" title="طرد">🚫</span>
+                                <button class="admin-action-btn" onclick="requestMoveUser('${user.socketId}', '${roomId}')" title="نقل">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3l4 4-4 4"></path><path d="M20 7H4"></path><path d="M8 21l-4-4 4-4"></path><path d="M4 17h16"></path></svg>
+                                </button>
+                                <button class="admin-action-btn" onclick="toggleForceMute('${user.socketId}', ${user.isMuted})" title="${user.isMuted ? 'إلغاء الكتم' : 'كتم إجباري'}">
+                                    ${user.isMuted ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>'}
+                                </button>
+                                <button class="admin-action-btn kick" onclick="requestKickUser('${user.socketId}')" title="طرد">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                                </button>
                             </div>
                         `;
                     }
@@ -849,7 +1004,7 @@ function initSocket(token) {
                     if (user.socketId !== socket.id) {
                         volumeControl = `
                             <div class="user-volume-control">
-                                <span>🔈</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-muted)"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                                 <input type="range" min="0" max="1" step="0.1" value="1" oninput="setUserVolume('${user.socketId}', this.value)">
                             </div>
                         `;
@@ -964,6 +1119,9 @@ function initSocket(token) {
             screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             document.getElementById('screen-share-btn').classList.add('active');
 
+            // Show local preview
+            showRemoteScreen('local', screenStream);
+
             screenStream.getVideoTracks()[0].onended = () => stopScreenShare();
 
             // Notify others in room
@@ -992,6 +1150,9 @@ function initSocket(token) {
             screenStream.getTracks().forEach(t => t.stop());
             screenStream = null;
         }
+        const localPreview = document.getElementById('screen-video-local');
+        if (localPreview) localPreview.remove();
+
         Object.values(screenConnections).forEach(pc => pc.close());
         screenConnections = {};
         document.getElementById('screen-share-btn').classList.remove('active');
@@ -1069,6 +1230,8 @@ function sendMessage(text, attachment = null) {
 
     const payload = {
         text: text,
+        replyTo: replyingTo,
+        serverId: activeContext.serverId || 'global-server',
         ...attachment
     };
 
@@ -1142,18 +1305,44 @@ function renderMessage(msg) {
 
     let mediaHtml = '';
     if (msg.file) {
-        if (msg.fileType && msg.fileType.startsWith('image/')) {
-            mediaHtml = `<img src="${msg.file}" class="message-image" onclick="window.open('${msg.file}')">`;
+        const isImage = (msg.fileType && msg.fileType.startsWith('image/')) || msg.file.startsWith('data:image/');
+        if (isImage) {
+            mediaHtml = `<div class="image-wrapper"><img src="${msg.file}" class="message-image" loading="lazy" onclick="window.open('${msg.file}')"></div>`;
         } else {
-            mediaHtml = `<div class="file-attachment">📂 <a href="${msg.file}" download="${msg.fileName}">${msg.fileName}</a></div>`;
+            mediaHtml = `<div class="file-attachment">📂 <a href="${msg.file}" download="${msg.fileName || 'file'}">${msg.fileName || 'تحميل الملف'}</a></div>`;
         }
     }
+
+    let replyHtml = '';
+    if (msg.replyTo) {
+        replyHtml = `
+            <div class="reply-to-content" onclick="scrollToMessage('${msg.replyTo.id}')">
+                <span class="reply-to-user">@${msg.replyTo.author}</span>
+                <span class="reply-to-text">${msg.replyTo.text}</span>
+            </div>
+        `;
+    }
+
+    let reactionsHtml = '<div class="reactions-container">';
+    if (msg.reactions) {
+        Object.entries(msg.reactions).forEach(([emoji, users]) => {
+            const activeClass = users.includes(currentUser.username) ? 'active' : '';
+            reactionsHtml += `
+                <div class="reaction-badge ${activeClass}" onclick="addReaction('${msg._id}', '${emoji}')">
+                    <span>${emoji}</span>
+                    <span class="reaction-count">${users.length}</span>
+                </div>
+            `;
+        });
+    }
+    reactionsHtml += '</div>';
 
     messageDiv.innerHTML = `
         <div class="message-avatar">
             <img src="${avatarSrc}" style="width:100%; height:100%; object-fit: cover; border-radius:50%">
         </div>
         <div class="message-content">
+            ${replyHtml}
             <div class="message-header">
                 <span class="author" style="${authorColor}">${authorName}</span>
                 <span class="user-level-badge">Lvl ${msg.level || 1}</span>
@@ -1161,13 +1350,39 @@ function renderMessage(msg) {
                 ${tagHtml}
                 <span class="timestamp">${time}</span>
                 ${deleteHtml}
+                <div class="message-actions">
+                    <button class="action-icon" title="رد" onclick="setReply('${msg._id}', '${authorName}', '${(msg.text || 'صورة/ملف').replace(/'/g, "\\'")}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+                    </button>
+                    <button class="action-icon" title="تفاعل" onclick="addReaction('${msg._id}', '❤️')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    </button>
+                    <button class="action-icon" onclick="addReaction('${msg._id}', '👍')">👍</button>
+                    <button class="action-icon" onclick="addReaction('${msg._id}', '😂')">😂</button>
+                    <button class="action-icon" onclick="addReaction('${msg._id}', '🔥')">🔥</button>
+                    <button class="action-icon" onclick="addReaction('${msg._id}', '💯')">💯</button>
+                </div>
             </div>
             <p class="text">${msg.text || ''}</p>
             ${mediaHtml}
+            ${reactionsHtml}
         </div>
     `;
     container.appendChild(messageDiv);
 }
+
+window.addReaction = function (messageId, emoji) {
+    if (socket) socket.emit('add_reaction', { messageId, emoji });
+};
+
+window.scrollToMessage = function (id) {
+    const el = document.querySelector(`[data-id="${id}"]`);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.backgroundColor = 'rgba(222, 75, 57, 0.2)';
+        setTimeout(() => el.style.backgroundColor = '', 2000);
+    }
+};
 
 window.deleteMsg = function (id) {
     if (confirm('هل أنت متأكد من حذف هذه الرسالة؟')) {
@@ -1180,3 +1395,55 @@ window.deleteMsg = function (id) {
         }
     }
 };
+window.resolveServerRequest = function (requestId, action) {
+    if (confirm(`هل أنت متأكد من ${action === 'approve' ? 'قبول' : 'رفض'} هذا الطلب؟`)) {
+        socket.emit('resolve_server_request', { requestId, action });
+    }
+};
+
+function renderServers(servers) {
+    const sidebar = document.querySelector('.server-sidebar');
+    // Keep internal ones or clear and rebuild
+    const existingIcons = sidebar.querySelectorAll('.server-icon:not(.add-server)');
+    existingIcons.forEach(icon => icon.remove());
+
+    servers.forEach(srv => {
+        const div = document.createElement('div');
+        div.className = 'server-icon';
+        if (activeContext.serverId === srv._id) div.classList.add('active');
+        div.title = srv.name;
+
+        if (srv.icon === 'logo.png') {
+            div.innerHTML = `<span class="server-initials">${srv.name.substring(0, 2)}</span>`;
+        } else {
+            div.innerHTML = `<img src="${srv.icon}" alt="${srv.name}" style="width:100%">`;
+        }
+
+        div.onclick = () => switchToServer(srv);
+        sidebar.insertBefore(div, sidebar.querySelector('.separator').nextSibling || sidebar.querySelector('.add-server'));
+    });
+}
+
+function switchToServer(server) {
+    activeContext.serverId = server._id;
+    document.querySelectorAll('.server-icon').forEach(el => el.classList.remove('active'));
+
+    // UI Update for sidebar icons
+    const icons = document.querySelectorAll('.server-icon');
+    icons.forEach(ic => {
+        if (ic.title === server.name) ic.classList.add('active');
+    });
+
+    // Update channels UI
+    document.querySelector('.sidebar-header h1').innerText = server.name;
+
+    // Switch to first channel or default
+    const channelName = (server.channels && server.channels.length > 0) ? server.channels[0].name : 'العامة';
+    activeContext.id = channelName;
+    document.getElementById('current-channel-name').innerText = channelName;
+    document.getElementById('message-input').placeholder = `أرسل رسالة في #${channelName}`;
+
+    // Clear and reload messages for this server
+    document.getElementById('messages').innerHTML = '';
+    socket.emit('get_previous_messages', { serverId: server._id });
+}

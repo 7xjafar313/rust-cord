@@ -1,0 +1,54 @@
+{
+  "users": [
+    {
+      "_id": "1768734907595",
+      "username": "sww",
+      "password": "$2a$10$2CkNOYbPL3AbSiwE3QMPwOnQQjwafSe.6B.8xpRTnvFnba8vzGdei",
+      "role": "admin",
+      "email": "admin@rustcord.com",
+      "createdAt": "2026-01-18T11:15:07.595Z"
+    }
+  ],
+  "messages": [],
+  "passwordRequests": [],
+  "bans": [],
+  "directMessages": [],
+  "roles": [
+    {
+      "name": "Admin",
+      "color": "#de4b39",
+      "permissions": [
+        "all"
+      ]
+    },
+    {
+      "name": "Member",
+      "color": "#b9bbbe",
+      "permissions": []
+    }
+  ],
+  "auditLogs": [],
+  "servers": [
+    {
+      "_id": "global-server",
+      "name": "راست كورد (العالمي)",
+      "ownerId": "system",
+      "members": [],
+      "channels": [
+        {
+          "id": "general",
+          "name": "العامة",
+          "type": "text"
+        },
+        {
+          "id": "news",
+          "name": "أخبار-البرنامج",
+          "type": "text"
+        }
+      ],
+      "icon": "logo.png",
+      "createdAt": "2026-01-18T11:15:07.949Z"
+    }
+  ],
+  "serverRequests": []
+}
