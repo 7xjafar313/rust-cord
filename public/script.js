@@ -67,12 +67,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const authTitle = document.getElementById('auth-title');
     // Invite Logic
     const inviteTrigger = document.getElementById('invite-trigger');
-    inviteTrigger.addEventListener('click', () => {
-        const url = window.location.href;
-        navigator.clipboard.writeText(url).then(() => {
-            alert('تم نسخ رابط الدعوة! أرسله لأصدقائك لينضموا إليك.');
+    if (inviteTrigger) {
+        inviteTrigger.addEventListener('click', () => {
+            const url = window.location.href;
+            navigator.clipboard.writeText(url).then(() => {
+                alert('تم نسخ رابط الدعوة! أرسله لأصدقائك لينضموا إليك.');
+            });
         });
-    });
+    }
 
     // Auth Switch Logic
     const switchToRegister = document.getElementById('switch-to-register');
@@ -80,67 +82,72 @@ document.addEventListener('DOMContentLoaded', () => {
     const appMain = document.getElementById('app-main');
     const logoutBtn = document.getElementById('logout-btn');
 
-    switchToRegister.addEventListener('click', () => {
-        isRegistering = !isRegistering;
-        authTitle.innerText = isRegistering ? 'إنشاء حساب في راست كورد' : 'تسجيل الدخول إلى راست كورد';
-        authBtn.innerText = isRegistering ? 'إنشاء حساب' : 'تسجيل الدخول';
-        switchToRegister.innerText = isRegistering ? 'تسجيل الدخول' : 'إنشاء حساب';
-        document.getElementById('email-group').style.display = isRegistering ? 'block' : 'none';
-    });
+    if (switchToRegister) {
+        switchToRegister.addEventListener('click', () => {
+            isRegistering = !isRegistering;
+            if (authTitle) authTitle.innerText = isRegistering ? 'إنشاء حساب في راست كورد' : 'تسجيل الدخول إلى راست كورد';
+            if (authBtn) authBtn.innerText = isRegistering ? 'إنشاء حساب' : 'تسجيل الدخول';
+            switchToRegister.innerText = isRegistering ? 'تسجيل الدخول' : 'إنشاء حساب';
+            const emailGroup = document.getElementById('email-group');
+            if (emailGroup) emailGroup.style.display = isRegistering ? 'block' : 'none';
+        });
+    }
 
-    authBtn.addEventListener('click', async () => {
-        const username = document.getElementById('auth-username').value;
-        const password = document.getElementById('auth-password').value;
-        const email = isRegistering ? document.getElementById('auth-email').value : '';
+    if (authBtn) {
+        authBtn.addEventListener('click', async () => {
+            const username = document.getElementById('auth-username').value;
+            const password = document.getElementById('auth-password').value;
+            const email = isRegistering ? document.getElementById('auth-email').value : '';
 
-        if (!username || !password || (isRegistering && !email)) return alert('يرجى ملء جميع الحقول');
+            if (!username || !password || (isRegistering && !email)) return alert('يرجى ملء جميع الحقول');
 
-        // Check if server is running, if not, use simulation
-        try {
-            const res = await fetch(isRegistering ? '/api/register' : '/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, email })
-            });
-            const data = await res.json();
-            if (res.ok && data.token) {
-                localStorage.setItem('rc_token', data.token);
-                localStorage.setItem('rc_user', JSON.stringify(data.user));
-                startApp(data.token, data.user);
-                return;
-            } else {
-                const errorData = await res.json().catch(() => ({}));
-                return alert(errorData.error || 'حدث خطأ غير متوقع في الخادم');
-            }
-        } catch (e) {
-            console.log("Server error or not found:", e);
-            alert('لا يمكن الاتصال بالخادم. يرجى التأكد من تشغيل server.js');
-        }
-
-        if (simulationMode) {
-            alert('سيتم الدخول في وضع التجربة (بدون حفظ في الخادم)');
-            // First user in simulation is always Admin
-            let users = JSON.parse(localStorage.getItem('rc_mock_users')) || [
-                { username: 'sww', password: 'mmkkll00998877', role: 'admin' }
-            ];
-            if (isRegistering) {
-                if (users.find(u => u.username === username)) return alert('المستخدم موجود مسبقاً');
-                const role = users.length === 0 ? 'admin' : 'user';
-                users.push({ username, password, role });
-                localStorage.setItem('rc_mock_users', JSON.stringify(users));
-                alert('تم التسجيل بنجاح (وضع التجربة)!');
-                switchToRegister.click();
-            } else {
-                const user = users.find(u => u.username === username && u.password === password);
-                if (user) {
-                    currentUser = user;
-                    startApp('sim-token', user);
+            // Check if server is running, if not, use simulation
+            try {
+                const res = await fetch(isRegistering ? '/api/register' : '/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, email })
+                });
+                const data = await res.json();
+                if (res.ok && data.token) {
+                    localStorage.setItem('rc_token', data.token);
+                    localStorage.setItem('rc_user', JSON.stringify(data.user));
+                    startApp(data.token, data.user);
+                    return;
                 } else {
-                    alert('خطأ في اسم المستخدم أو كلمة المرور');
+                    const errorData = await res.json().catch(() => ({}));
+                    return alert(errorData.error || 'حدث خطأ غير متوقع في الخادم');
+                }
+            } catch (e) {
+                console.log("Server error or not found:", e);
+                alert('لا يمكن الاتصال بالخادم. يرجى التأكد من تشغيل server.js');
+            }
+
+            if (simulationMode) {
+                alert('سيتم الدخول في وضع التجربة (بدون حفظ في الخادم)');
+                // First user in simulation is always Admin
+                let users = JSON.parse(localStorage.getItem('rc_mock_users')) || [
+                    { username: 'sww', password: 'mmkkll00998877', role: 'admin' }
+                ];
+                if (isRegistering) {
+                    if (users.find(u => u.username === username)) return alert('المستخدم موجود مسبقاً');
+                    const role = users.length === 0 ? 'admin' : 'user';
+                    users.push({ username, password, role });
+                    localStorage.setItem('rc_mock_users', JSON.stringify(users));
+                    alert('تم التسجيل بنجاح (وضع التجربة)!');
+                    switchToRegister.click();
+                } else {
+                    const user = users.find(u => u.username === username && u.password === password);
+                    if (user) {
+                        currentUser = user;
+                        startApp('sim-token', user);
+                    } else {
+                        alert('خطأ في اسم المستخدم أو كلمة المرور');
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     const savedToken = localStorage.getItem('rc_token') || localStorage.getItem('rc_sim_token');
     const savedUser = localStorage.getItem('rc_user') || localStorage.getItem('rc_sim_user');
