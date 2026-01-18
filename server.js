@@ -897,6 +897,22 @@ io.on('connection', async (socket) => {
         }
     });
 
+    socket.on('create_role', (data) => {
+        if (socket.user.role === 'admin') {
+            const newRole = {
+                id: Date.now().toString(),
+                name: data.name,
+                color: data.color
+            };
+            if (!localDb.roles) localDb.roles = []; // Ensure array exists
+            localDb.roles.push(newRole);
+            saveAndSyncDb();
+
+            io.emit('roles_updated', localDb.roles);
+            logAudit(socket.user.id, socket.user.username, 'إنشاء رتبة', `الاسم: ${data.name}`);
+        }
+    });
+
     socket.on('mute_all_voice', (data) => {
         if (socket.user.role === 'admin' || socket.user.role === 'assistant') {
             const { roomId } = data;
