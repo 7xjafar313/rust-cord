@@ -49,8 +49,11 @@ async function searchYouTube(query) {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
         });
         const html = res.data;
-        const match = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/);
+        // Improved regex to find videoId in various YouTube response formats
+        const match = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
         if (match) return match[1];
+        const backupMatch = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/);
+        if (backupMatch) return backupMatch[1];
     } catch (e) { console.error("YT Search Error:", e); }
     return null;
 }
@@ -460,29 +463,23 @@ io.use((socket, next) => {
 io.on('connection', async (socket) => {
     // إرسالة قائمة الأعضاء المتصلين لجميع المستخدمين
     const broadcastOnlineUsers = () => {
-        const onlineUsers = [];
-        const seenUserIds = new Set();
-
-        // Get all connected sockets and their associated users
+        const connectedSids = new Set();
         for (const [id, s] of io.sockets.sockets) {
-            if (s.user && !seenUserIds.has(s.user.id)) {
-                const userData = localDb.users.find(u => u._id === s.user.id);
-                if (userData) {
-                    onlineUsers.push({
-                        id: userData._id,
-                        username: userData.username,
-                        avatar: userData.avatar,
-                        status: userData.status,
-                        customStatus: userData.customStatus,
-                        role: userData.role,
-                        isVerified: userData.isVerified,
-                        level: userData.level
-                    });
-                    seenUserIds.add(s.user.id);
-                }
-            }
+            if (s.user) connectedSids.add(s.user.id);
         }
-        io.emit('update_members_list', onlineUsers);
+
+        const allUsers = localDb.users.map(userData => ({
+            id: userData._id,
+            username: userData.username,
+            avatar: userData.avatar,
+            status: connectedSids.has(userData._id) ? (userData.status || 'online') : 'offline',
+            customStatus: userData.customStatus,
+            role: userData.role,
+            isVerified: userData.isVerified,
+            level: userData.level
+        }));
+
+        io.emit('update_members_list', allUsers);
     };
 
     broadcastOnlineUsers();
@@ -569,6 +566,7 @@ io.on('connection', async (socket) => {
             const query = data.text.replace('#شغل', '').trim();
             if (query) {
                 (async () => {
+                    console.log(`🔍 Bot Searching for: ${query}`);
                     let videoId = null;
                     if (query.includes('youtube.com/watch?v=')) {
                         videoId = query.split('v=')[1].split('&')[0];
@@ -579,6 +577,7 @@ io.on('connection', async (socket) => {
                     }
 
                     if (videoId) {
+                        console.log(`✅ Found Video ID: ${videoId}`);
                         // Find user's room to "join" it
                         let userRoomId = null;
                         Object.keys(voiceRooms).forEach(rid => {
@@ -586,6 +585,7 @@ io.on('connection', async (socket) => {
                         });
 
                         if (userRoomId) {
+                            console.log(`🤖 Bot joining voice room: ${userRoomId}`);
                             // Remove bot from any other room first
                             Object.keys(voiceRooms).forEach(rid => {
                                 voiceRooms[rid] = voiceRooms[rid].filter(u => u.userId !== 'bot-id');
@@ -618,6 +618,7 @@ io.on('connection', async (socket) => {
                         io.emit('play_youtube', { videoId, title: query });
                         logAudit('system', 'Bot', 'تشغيل يوتيوب', query);
                     } else {
+                        console.log(`❌ No Video ID found for: ${query}`);
                         const errorMsg = {
                             _id: 'bot-' + Date.now(),
                             author: 'راست بوت 🤖',

@@ -34,6 +34,7 @@ let screenConnections = {}; // socketId -> RTCPeerConnection (Screenshare)
 let activeContext = { type: 'channel', id: 'العامة', serverId: 'global-server' }; // { type: 'channel'|'dm', id: string, serverId: string }
 let currentTypingUsers = new Set();
 let replyingTo = null; // { id, author, text }
+let socketUsernameMap = {}; // socketId -> username for UI display
 
 // Mock database for simulation mode
 let mockMessages = JSON.parse(localStorage.getItem('rc_mock_messages')) || [
@@ -615,9 +616,16 @@ function renderMembersList(members) {
     container.innerHTML = '';
     members.forEach(member => {
         const memberDiv = document.createElement('div');
-        memberDiv.className = 'dm-user-item'; // Reuse styles
+        memberDiv.className = 'dm-user-item';
+        if (member.status === 'offline') memberDiv.classList.add('offline');
+
         const verifiedHtml = member.isVerified ? '<span class="verified-badge" title="حساب موثق" style="margin-left:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"></path></svg></span>' : '';
         const roleColor = (member.role === 'admin') ? 'var(--admin-gold)' : (member.role === 'assistant' ? 'var(--assistant-gold)' : '');
+
+        let statusText = 'متصل';
+        if (member.status === 'offline') statusText = 'غير متصل';
+        else if (member.status === 'dnd') statusText = 'يرجى عدم الإزعاج';
+        else if (member.status === 'idle') statusText = 'خامل';
 
         memberDiv.innerHTML = `
             <div class="dm-user-avatar">
@@ -626,7 +634,7 @@ function renderMembersList(members) {
             </div>
             <div class="dm-user-info">
                 <span class="dm-username" style="color: ${roleColor}">${member.username}${verifiedHtml}</span>
-                <span class="dm-status">${member.customStatus || (member.status === 'online' ? 'متصل' : (member.status === 'dnd' ? 'يرجى عدم الإزعاج' : 'خامل'))}</span>
+                <span class="dm-status">${member.customStatus || statusText}</span>
             </div>
         `;
         memberDiv.onclick = () => switchToDM(member.username);
@@ -651,6 +659,14 @@ function switchToDM(username, avatar) {
     document.getElementById('current-channel-name').innerText = `@${username}`;
     document.getElementById('message-input').placeholder = `أرسل رسالة إلى ${username}`;
     document.querySelectorAll('.channel-item, .dm-user-item').forEach(el => el.classList.remove('active'));
+
+    const dmItem = document.getElementById(`dm-${username}`);
+    if (dmItem) {
+        dmItem.classList.add('active');
+        dmItem.classList.remove('has-unread');
+        const statusEl = dmItem.querySelector('.dm-status');
+        if (statusEl && statusEl.innerText.includes('رسالة')) statusEl.innerText = 'متصل';
+    }
 
     // Fetch DMs
     if (socket) socket.emit('get_dms_with', username);
@@ -723,9 +739,38 @@ function initSocket(token) {
         if (activeContext.type === 'dm' && (msg.from === activeContext.id || msg.from === currentUser.username)) {
             renderMessage(msg);
             document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        } else if (msg.from !== currentUser.username) {
+            // Notification for new DM if not in that DM
+            showDMNotification(msg);
         }
         updateDMList(msg);
     });
+
+    function showDMNotification(msg) {
+        const notification = document.createElement('div');
+        notification.className = 'level-up-toast'; // Reuse beauty of level-up toast
+        notification.style.background = 'var(--accent-primary)';
+        notification.innerHTML = `
+            <div style="display:flex; align-items:center;">
+                <img src="${msg.avatar || 'logo.png'}" style="width:30px; height:30px; border-radius:50%; margin-left:10px;">
+                <div>
+                    <div style="font-weight:bold;">رسالة خاصة من ${msg.from}</div>
+                    <div style="font-size:12px; opacity:0.9;">${msg.text ? (msg.text.substring(0, 30) + '...') : 'أرسل ملفاً'}</div>
+                </div>
+            </div>
+        `;
+        notification.onclick = () => {
+            switchToDM(msg.from);
+            notification.remove();
+        };
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 5000);
+
+        // Play notification sound if possible
+        const bell = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        bell.volume = 0.5;
+        bell.play().catch(() => { });
+    }
 
     socket.on('update_members_list', (members) => {
         renderMembersList(members);
@@ -769,25 +814,49 @@ function initSocket(token) {
         document.getElementById('music-panel').style.display = 'flex';
         document.getElementById('current-track').innerText = `مشغل الآن (يوتيوب): ${data.title}`;
 
-        if (!ytPlayer && ytApiReady) {
-            ytPlayer = new YT.Player('youtube-player-container', {
-                height: '1',
-                width: '1',
-                videoId: data.videoId,
-                playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1 },
-                events: {
-                    'onReady': (event) => {
-                        event.target.playVideo();
-                        event.target.unMute();
-                        event.target.setVolume(100);
+        const startYT = () => {
+            if (!ytPlayer) {
+                ytPlayer = new YT.Player('youtube-player-container', {
+                    height: '1',
+                    width: '1',
+                    videoId: data.videoId,
+                    playerVars: {
+                        'autoplay': 1,
+                        'controls': 0,
+                        'modestbranding': 1,
+                        'origin': window.location.origin
                     },
-                    'onError': (e) => console.error("YT Error:", e)
+                    events: {
+                        'onReady': (event) => {
+                            event.target.playVideo();
+                            event.target.unMute();
+                            event.target.setVolume(100);
+                        },
+                        'onStateChange': (event) => {
+                            if (event.data === YT.PlayerState.UNSTARTED) {
+                                event.target.playVideo();
+                            }
+                        },
+                        'onError': (e) => console.error("YT Error:", e)
+                    }
+                });
+            } else if (ytPlayer.loadVideoById) {
+                ytPlayer.loadVideoById(data.videoId);
+                ytPlayer.playVideo();
+                ytPlayer.unMute();
+            }
+        };
+
+        if (ytApiReady) {
+            startYT();
+        } else {
+            // Wait for API
+            const checkReady = setInterval(() => {
+                if (ytApiReady) {
+                    clearInterval(checkReady);
+                    startYT();
                 }
-            });
-        } else if (ytPlayer && ytPlayer.loadVideoById) {
-            ytPlayer.loadVideoById(data.videoId);
-            ytPlayer.playVideo();
-            ytPlayer.unMute();
+            }, 500);
         }
     });
 
@@ -846,14 +915,20 @@ function initSocket(token) {
                 <div class="dm-user-avatar"><img src="logo.png" style="width:100%"></div>
                 <div class="dm-user-info">
                     <span class="dm-username">${otherUser}</span>
-                    <span class="dm-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:4px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>رسالة جديدة</span>
+                    <span class="dm-status">${msg.from === currentUser.username ? 'آخر رسالة منك' : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:4px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>رسالة جديدة'}</span>
                 </div>
             `;
             dmItem.onclick = () => {
                 switchToDM(otherUser);
-                dmItem.classList.add('active');
+                dmItem.classList.remove('has-unread');
+                dmItem.querySelector('.dm-status').innerText = 'متصل';
             };
             document.getElementById('dm-list').appendChild(dmItem);
+        }
+
+        if (msg.from !== currentUser.username && (activeContext.type !== 'dm' || activeContext.id !== otherUser)) {
+            dmItem.classList.add('has-unread');
+            dmItem.querySelector('.dm-status').innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:4px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>رسالة غير مقروءة';
         }
     }
 
@@ -957,22 +1032,56 @@ function initSocket(token) {
         });
     });
 
-    async function initLocalStream() {
+    async function initLocalStream(withVideo = false) {
         try {
-            if (!localStream) {
-                const rawStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                localStream = rawStream;
-                console.log("🎤 تم تفعيل الميكروفون");
+            // Check if we already have the requested tracks
+            if (localStream) {
+                const hasVideo = localStream.getVideoTracks().length > 0;
+                if (!withVideo || hasVideo) {
+                    // We already have what we need, or we don't need video
+                    return localStream;
+                }
+            }
 
-                if (currentUser.role === 'admin' || currentUser.role === 'assistant') {
-                    const processed = await applyAudioProcessing(rawStream);
-                    localStream = processed; // Update global localStream to the processed one
-                    return processed;
+            const constraints = {
+                audio: true,
+                video: withVideo ? { facingMode: "user" } : false
+            };
+
+            console.log("🎬 Requesting media with constraints:", constraints);
+            const rawStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+            if (!localStream) {
+                localStream = rawStream;
+            } else {
+                rawStream.getTracks().forEach(track => {
+                    const exists = localStream.getTracks().find(t => t.kind === track.kind);
+                    if (!exists) localStream.addTrack(track);
+                });
+            }
+
+            console.log("🎤 تم تفعيل الوسائط بنجاح");
+
+            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'assistant')) {
+                const audioTracks = localStream.getAudioTracks();
+                if (audioTracks.length > 0) {
+                    const audioOnly = new MediaStream(audioTracks);
+                    const processed = await applyAudioProcessing(audioOnly);
+                    const combined = new MediaStream([
+                        ...processed.getAudioTracks(),
+                        ...localStream.getVideoTracks()
+                    ]);
+                    return combined;
                 }
             }
             return localStream;
         } catch (e) {
-            alert("خطأ: يرجى السماح بالوصول للميكروفون لتتمكن من التحدث");
+            console.error("Stream init error:", e);
+            if (withVideo) {
+                alert("تعذر تشغيل الكاميرا. يرجى التأكد من إعطاء الصلاحيات.");
+            } else {
+                alert("تعذر تشغيل الميكروفون. يرجى التأكد من إعطاء الصلاحيات.");
+            }
             return null;
         }
     }
@@ -992,17 +1101,52 @@ function initSocket(token) {
         };
 
         pc.ontrack = (event) => {
-            console.log(`🔊 Receiving audio from: ${targetSocketId}`);
-            const remoteAudio = new Audio();
-            remoteAudio.srcObject = event.streams[0];
-            remoteAudio.autoplay = true;
-            userAudios[targetSocketId] = remoteAudio;
-            remoteAudio.play().catch(err => console.error("Auto-play failed:", err));
+            handleRemoteTrack(targetSocketId, event);
+        };
+
+        pc.onnegotiationneeded = async () => {
+            try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit('voice_signal', { to: targetSocketId, signal: offer });
+            } catch (err) { console.error(err); }
         };
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('voice_signal', { to: targetSocketId, signal: offer });
+    }
+
+    function handleRemoteTrack(socketId, event) {
+        if (event.track.kind === 'audio') {
+            console.log(`🔊 Receiving audio from: ${socketId}`);
+            const remoteAudio = new Audio();
+            remoteAudio.srcObject = event.streams[0];
+            remoteAudio.autoplay = true;
+            userAudios[socketId] = remoteAudio;
+            remoteAudio.play().catch(err => console.error("Auto-play failed:", err));
+        } else if (event.track.kind === 'video') {
+            console.log(`📹 Receiving video from: ${socketId}`);
+            renderRemoteVideo(socketId, event.streams[0]);
+        }
+    }
+
+    function renderRemoteVideo(socketId, stream) {
+        let grid = document.getElementById('voice-video-grid');
+        let videoWrap = document.getElementById(`video-wrap-${socketId}`);
+        if (!videoWrap) {
+            videoWrap = document.createElement('div');
+            videoWrap.id = `video-wrap-${socketId}`;
+            videoWrap.className = 'video-item';
+            const label = socketId === 'local' ? 'أنت' : (socketUsernameMap[socketId] || `مستخدم (${socketId.substring(0, 4)})`);
+            videoWrap.innerHTML = `
+            <video autoplay playsinline ${socketId === 'local' ? 'muted' : ''}></video>
+            <div class="video-label">${label}</div>
+        `;
+            grid.appendChild(videoWrap);
+        }
+        const video = videoWrap.querySelector('video');
+        if (video.srcObject !== stream) video.srcObject = stream;
     }
 
     socket.on('voice_signal', async (data) => {
@@ -1021,12 +1165,15 @@ function initSocket(token) {
             };
 
             pc.ontrack = (event) => {
-                console.log(`🔊 Receiving audio from: ${data.from}`);
-                const remoteAudio = new Audio();
-                remoteAudio.srcObject = event.streams[0];
-                remoteAudio.autoplay = true;
-                userAudios[data.from] = remoteAudio;
-                remoteAudio.play().catch(err => console.error("Auto-play failed:", err));
+                handleRemoteTrack(data.from, event);
+            };
+
+            pc.onnegotiationneeded = async () => {
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    socket.emit('voice_signal', { to: data.from, signal: offer });
+                } catch (err) { console.error(err); }
             };
         }
 
@@ -1155,8 +1302,12 @@ function initSocket(token) {
     // Handle updates to rooms to initiate calls
     socket.on('voice_state_update', async (rooms) => {
         // Find which room I am in
-        let myRoomId = null;
+        // Update username map
+        socketUsernameMap = {};
         Object.keys(rooms).forEach(rid => {
+            rooms[rid].forEach(u => {
+                socketUsernameMap[u.socketId] = u.username;
+            });
             if (rooms[rid].find(u => u.socketId === socket.id)) myRoomId = rid;
         });
 
@@ -1174,6 +1325,9 @@ function initSocket(token) {
                     if (peerConnections[sid]) peerConnections[sid].close();
                     delete peerConnections[sid];
                     if (userAudios[sid]) delete userAudios[sid];
+
+                    const remoteVid = document.getElementById(`video-wrap-${sid}`);
+                    if (remoteVid) remoteVid.remove();
                 }
             });
 
@@ -1375,14 +1529,16 @@ function initSocket(token) {
 
         // Check for WebRTC support
         if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            const isAndroid = /Android/.test(navigator.userAgent);
             const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-            let errorMsg = "عذراً، مشاركة الشاشة غير مدعومة في متصفحك.";
+
+            let errorMsg = "عذراً، مشاركة الشاشة غير مدعومة في هذا المتصفح.";
             if (isIOS) {
-                errorMsg = "عذراً، متصفح سفاري على آيفون لا يدعم مشاركة الشاشة عبر الويب. جرب استخدام جهاز كمبيوتر.";
+                errorMsg = "آيفون وسفاري لا يدعمان مشاركة الشاشة حالياً. يرجى استخدام جهاز كمبيوتر.";
+            } else if (isAndroid) {
+                errorMsg = "أندرويد كروم لا يدعم مشاركة الشاشة للويب حالياً. جرب استخدام متصفح Firefox على أندرويد أو استخدم جهاز كمبيوتر.";
             } else if (!window.isSecureContext) {
-                errorMsg = "مشاركة الشاشة تتطلب اتصال آمن (HTTPS).";
-            } else {
-                errorMsg = "جرب استخدام متصفح كروم المحدث على أندرويد.";
+                errorMsg = "مشاركة الشاشة تتطلب رابط آمن (HTTPS).";
             }
             alert(errorMsg);
             return;
@@ -1390,13 +1546,13 @@ function initSocket(token) {
 
         try {
             // Simplified constraints for better mobile compatibility
+            // Enhanced constraints for DisplayMedia
             const constraints = {
-                video: {
-                    cursor: "always"
-                },
-                audio: false // Screen audio is tricky on mobile
+                video: true, // Simple Boolean 'true' often works best on mobile browsers that support it
+                audio: false
             };
 
+            console.log("🖥️ Starting screen share...");
             screenStream = await navigator.mediaDevices.getDisplayMedia(constraints);
             document.getElementById('screen-share-btn').classList.add('active');
 
@@ -1438,7 +1594,48 @@ function initSocket(token) {
         if (socket) socket.emit('update_voice_status', localVoiceStatus);
     }
 
-    let localVoiceStatus = { isMuted: false, isDeafened: false, isSharingScreen: false };
+    let localVoiceStatus = { isMuted: false, isDeafened: false, isSharingScreen: false, isVideoOn: false };
+
+    document.getElementById('video-btn').addEventListener('click', async () => {
+        localVoiceStatus.isVideoOn = !localVoiceStatus.isVideoOn;
+        const btn = document.getElementById('video-btn');
+        btn.classList.toggle('active', localVoiceStatus.isVideoOn);
+
+        if (localVoiceStatus.isVideoOn) {
+            const stream = await initLocalStream(true);
+            if (stream) {
+                const videoTrack = stream.getVideoTracks()[0];
+                // Add track to all active peer connections
+                Object.values(peerConnections).forEach(pc => {
+                    const senders = pc.getSenders();
+                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                    if (videoSender) {
+                        videoSender.replaceTrack(videoTrack);
+                    } else {
+                        pc.addTrack(videoTrack, localStream);
+                    }
+                });
+                renderRemoteVideo('local', localStream);
+            }
+        } else {
+            // Stop camera tracks
+            if (localStream) {
+                localStream.getVideoTracks().forEach(t => {
+                    t.stop();
+                    localStream.removeTrack(t);
+                });
+            }
+            const localVid = document.getElementById('video-wrap-local');
+            if (localVid) localVid.remove();
+
+            // Remove video track from connections
+            Object.values(peerConnections).forEach(pc => {
+                const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                if (videoSender) pc.removeTrack(videoSender);
+            });
+        }
+        socket.emit('update_voice_status', localVoiceStatus);
+    });
 
     document.getElementById('mute-btn').addEventListener('click', () => {
         localVoiceStatus.isMuted = !localVoiceStatus.isMuted;
@@ -1472,7 +1669,11 @@ function initSocket(token) {
 
         stopScreenShare();
 
-        localVoiceStatus = { isMuted: false, isDeafened: false, isSharingScreen: false };
+        // Clear Video Grid
+        document.getElementById('voice-video-grid').innerHTML = '';
+        document.getElementById('video-btn').classList.remove('active');
+
+        localVoiceStatus = { isMuted: false, isDeafened: false, isSharingScreen: false, isVideoOn: false };
         document.getElementById('mute-btn').classList.remove('active');
         document.getElementById('deafen-btn').classList.remove('active');
         userAudios = {};
@@ -1503,6 +1704,17 @@ function initSocket(token) {
     document.getElementById('stop-music-btn').addEventListener('click', () => {
         if (currentUser.role === 'admin' || currentUser.role === 'assistant') {
             socket.emit('stop_music_req');
+        }
+    });
+
+    document.getElementById('refresh-sound-btn').addEventListener('click', () => {
+        if (ytPlayer && ytPlayer.playVideo) {
+            ytPlayer.playVideo();
+            ytPlayer.unMute();
+            ytPlayer.setVolume(100);
+            alert("تمت محاولة تنشيط الصوت بنجاح!");
+        } else {
+            alert("لا يوجد بث يوتيوب حالياً لتنشيطه.");
         }
     });
 }
