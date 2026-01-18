@@ -452,21 +452,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    requestPwdResetBtn.addEventListener('click', async () => {
-        const token = localStorage.getItem('rc_token');
-        if (!token) return alert('غير ممكن في وضع التجربة');
+    if (requestPwdResetBtn) {
+        requestPwdResetBtn.addEventListener('click', async () => {
+            const token = localStorage.getItem('rc_token');
+            if (!token) return alert('غير ممكن في وضع التجربة');
 
-        try {
-            const res = await fetch('/api/request-password-reset', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token })
-            });
-            if (res.ok) alert('تم إرسال طلبك للمدير بنجاح.');
-        } catch (e) {
-            alert('خطأ في الاتصال');
-        }
-    });
+            try {
+                const res = await fetch('/api/request-password-reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+                if (res.ok) alert('تم إرسال طلبك للمدير بنجاح.');
+            } catch (e) {
+                alert('خطأ في الاتصال');
+            }
+        });
+    }
 
     async function loadPasswordRequests() {
         const token = localStorage.getItem('rc_token');
