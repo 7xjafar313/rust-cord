@@ -7,10 +7,53 @@
     <title>Rust Cord | راست كورد</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 
 <body>
-    <div class="app-container">
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-card">
+            <div class="auth-header">
+                <i class="fab fa-rust auth-logo"></i>
+                <h2 id="auth-title">مرحباً بعودتك!</h2>
+                <p id="auth-subtitle">يسعدنا رؤيتك مجدداً!</p>
+            </div>
+            <form id="auth-form">
+                <div class="input-group">
+                    <label>البريد الإلكتروني</label>
+                    <input type="email" id="auth-email" required>
+                </div>
+                <div class="input-group">
+                    <label>كلمة المرور</label>
+                    <input type="password" id="auth-pass" required>
+                </div>
+                <div class="input-group" id="name-group" style="display: none;">
+                    <label>الاسم الكامل</label>
+                    <input type="text" id="auth-fullname">
+                </div>
+                <div class="input-group" id="username-group" style="display: none;">
+                    <label>اسم المستخدم</label>
+                    <input type="text" id="auth-username">
+                </div>
+                <div class="input-group" id="bio-group" style="display: none;">
+                    <label>نبذة شخصية (Bio)</label>
+                    <textarea id="auth-bio"
+                        style="width: 100%; background: #1e1f22; border: none; border-radius: 3px; color: white; padding: 10px; outline: none; resize: none;"></textarea>
+                </div>
+                <div class="input-group" id="avatar-group" style="display: none;">
+                    <label>رابط الصورة الشخصية</label>
+                    <input type="url" id="auth-avatar" placeholder="https://example.com/image.jpg">
+                </div>
+                <button type="submit" class="auth-btn" id="auth-submit">تسجيل الدخول</button>
+                <div class="auth-footer">
+                    <span id="auth-switch-text">تحتاج إلى حساب؟</span>
+                    <a href="#" id="auth-switch-link">سجل الآن</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="app-container" id="main-app" style="display: none;">
         <!-- Servers Sidebar -->
         <nav class="servers-sidebar">
             <div class="server-icon active" title="راست كورد الرسمي">
@@ -77,6 +120,21 @@
                     </div>
                 </div>
             </div>
+            <!-- Voice Connection Panel -->
+            <div class="voice-connection" id="voice-panel" style="display: none;">
+                <div class="voice-status">
+                    <i class="fas fa-signal"></i>
+                    <div class="voice-details">
+                        <span class="status-text">متصل صوتياً</span>
+                        <span class="channel-name">ديوانية</span>
+                    </div>
+                </div>
+                <div class="voice-actions">
+                    <i class="fas fa-phone-slash" id="disconnect-voice" title="قطع الاتصال"></i>
+                    <i class="fas fa-video" id="toggle-camera" title="تشغيل الكاميرا"></i>
+                    <i class="fas fa-desktop" id="toggle-screen" title="مشاركة الشاشة"></i>
+                </div>
+            </div>
             <div class="user-controls">
                 <div class="user-info">
                     <div class="avatar-wrapper">
@@ -114,6 +172,8 @@
                     <i class="fas fa-question-circle"></i>
                 </div>
             </header>
+            <!-- Video Grid for Calls -->
+            <div id="video-grid" class="video-grid" style="display: none;"></div>
             <div class="messages-container">
                 <div class="message">
                     <img src="https://via.placeholder.com/40" alt="Avatar" class="message-avatar">
@@ -172,6 +232,37 @@
                 </div>
             </div>
         </aside>
+    </div>
+    <!-- Profile Settings Modal -->
+    <div id="settings-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h2>إعدادات الحساب</h2>
+                <i class="fas fa-times close-modal" id="close-settings"></i>
+            </header>
+            <form id="settings-form">
+                <div class="input-group">
+                    <label>الاسم الكامل</label>
+                    <input type="text" id="settings-fullname">
+                </div>
+                <div class="input-group">
+                    <label>النبذة الشخصية (Bio)</label>
+                    <textarea id="settings-bio"
+                        style="width: 100%; background: #1e1f22; border: none; border-radius: 3px; color: white; padding: 10px; outline: none; resize: none;"></textarea>
+                </div>
+                <div class="input-group">
+                    <label>رابط الصورة الشخصية</label>
+                    <input type="url" id="settings-avatar">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" id="cancel-settings">إلغاء</button>
+                    <button type="submit" class="btn-save">حفظ التغييرات</button>
+                </div>
+                <div class="logout-section">
+                    <button type="button" class="btn-logout" id="logout-btn">تسجيل الخروج</button>
+                </div>
+            </form>
+        </div>
     </div>
     <script src="script.js"></script>
 </body>
